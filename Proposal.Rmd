@@ -1,0 +1,53 @@
+---
+title: "Project Proposal (Seoul Bike Sharing Demand)"
+author: "Scott Downey, Sushma Pawna, William Shih"
+output:
+  html_document: 
+    theme: readable
+urlcolor: cyan
+---
+
+
+## 1 Names of Group Members
+
+1. Scott Downey
+2. Sushma Pawna
+3. William Shih
+
+## 2 Title
+
+Seoul Bike Sharing Demand Linear Regression Analysis
+
+## 3 Description of the Data 
+
+8760 observations, 14 variables
+
+The data set contains bike sharing data in Seoul from 12/1/2017 to 11/30/2018. Each observation represents an hour of time. The variable of interest for prediction is the rented bike count for the hour. The 12 variables that will be considered as predictors include the hour of day, temperature, humidity, wind speed, visibility, dew point, solar radiation, rainfall, snowfall, season of year, holiday (boolean), and functioning (boolean).
+
+## 4 Background Information of the Data
+
+The description of the dataset can be found at https://archive.ics.uci.edu/ml/datasets/Seoul+Bike+Sharing+Demand
+
+The data source according to the description is found at the Seoul government website http://data.seoul.go.kr/
+
+The dataset is associated with two papers published in a journal in February and March 2020 related to gradient tree boosting, but here we'll be only using linear regression.
+
+## 5 Brief Statement
+
+Rental bikes and bike sharing are important in urban cities as bikes reduce traffic congestion, reduce air pollution, and improve last mile transportation. Bikes will become even more important in the future as cities urbanize and have high population densities. Predicting exactly many bikes to provide makes sure that there will be no shortage of bikes that would result in people waiting for a bike yet also not have a large surplus of bikes as that would be a waste of resources. 
+
+## 6 Loading the Data into R
+
+```{r, message = FALSE, warning = FALSE}
+require(dplyr)
+colnames = c("Date","RentedBikeCount","Hour","Temperature","Humidity","Wind","Visibility",
+             "DewPoint","SolarRadiation","Rainfall","Snowfall","Season","Holiday","Functional")
+data = read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/00560/SeoulBikeData.csv",
+                col.names = colnames)
+data = tibble(data)
+glimpse(data)
+head(data$RentedBikeCount)
+```
+
+
+
