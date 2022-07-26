@@ -1,6 +1,6 @@
 ---
 title: "Project Proposal (Seoul Bike Sharing Demand)"
-author: "Scott Downey, Sushma Pawna, William Shih"
+author: "Scott Downey, Sushma Ponna, William Shih"
 output:
   html_document: 
     theme: readable
@@ -11,7 +11,7 @@ urlcolor: cyan
 ## 1 Names of Group Members
 
 1. Scott Downey
-2. Sushma Pawna
+2. Sushma Ponna
 3. William Shih
 
 ## 2 Title
