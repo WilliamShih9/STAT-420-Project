@@ -1,0 +1,141 @@
+---
+title: "Seoul Bike Sharing Demand"
+author: "STAT 420, Summer 2022, Scott Downey, Sushma Ponna, William Shih"
+output:
+  html_document: 
+    theme: readable
+    toc: yes
+urlcolor: cyan
+---
+
+***
+
+## Introduction
+Rental bikes and bike sharing are important in urban cities as bikes reduce traffic congestion, reduce air pollution, and improve last mile transportation. Bikes will become even more important in the future as cities urbanize and have high population densities. The goal of this project is to build a model that will accurately predict the volume of bike rentals at a given time. Predicting exactly many bikes to provide makes sure that there will be no shortage of bikes that would result in people waiting for a bike yet also not have a large surplus of bikes as that would be a waste of resources.
+
+The data set contains bike sharing data in Seoul from 12/1/2017 to 11/30/2018. Each observation represents an hour of time. The variable of interest for prediction is the rented bike count for the hour. The 12 variables that will be considered as predictors include the hour of day, temperature, humidity, wind speed, visibility, dew point, solar radiation, rainfall, snowfall, season of year, holiday (boolean), and functioning (boolean). The dataset is associated with two papers published in a journal in February and March 2020 related to gradient tree boosting, but here we'll be only using linear regression. and is found at the Seoul government website http://data.seoul.go.kr/
+
+A further description of the dataset can be found at https://archive.ics.uci.edu/ml/datasets/Seoul+Bike+Sharing+Demand
+
+## Methods
+
+```{r, message = FALSE, warning = FALSE}
+#Load the bike sharing data into R
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+colnames = c("Date","RentedBikeCount","Hour","Temperature","Humidity","Wind","Visibility",
+             "DewPoint","SolarRadiation","Rainfall","Snowfall","Season","Holiday","Functional")
+data = read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/00560/SeoulBikeData.csv",
+                col.names = colnames)
+data = tibble(data)
+#Separate 'Date'  into Day, Month and Year
+data = separate(data, "Date", c("Day", "Month", "Year"))
+#Convert predictors to factors or integers as needed
+data$Season = as.factor(data$Season)
+data$Holiday = as.factor(data$Holiday)
+data$Functional = as.factor(data$Functional)
+data$Day = as.integer(data$Day)
+data$Month = as.integer(data$Month)
+data$Year = as.integer(data$Year)
+data = select(data, -Year)
+```
+
+```{r, warning = FALSE}
+correlations = round(cor(data %>% select(-c(Day, Month, Season, Holiday, Functional))), 2)
+cor_melt = reshape2::melt(correlations)
+ggplot(cor_melt, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  xlab("x") + ylab("y") + ggtitle("Correlation Plot") +
+  scale_fill_gradient2(low = "#075AFF",
+                       mid = "#FFFFCC",
+                       high = "#FF0000") +
+  geom_label(aes(label = value), color = "black", label.size = NA)
+```
+
+
+```{r, warning = FALSE}
+data %>%
+  select(RentedBikeCount, Hour, Day, Month) %>%
+  gather(-RentedBikeCount, key = "xaxis", value = "value") %>%
+  ggplot(aes(x = value, y = RentedBikeCount)) + 
+    geom_point() + theme_bw() +
+    stat_smooth(geom = "smooth", size = 2, level = 0.95) +
+    facet_wrap(xaxis ~ ., scales = "free_x")
+```
+
+
+```{r, warning = FALSE}
+data %>%
+  select(RentedBikeCount, Temperature, Humidity, Wind, Visibility) %>%
+  rename(`Humidity (%)` = Humidity, `Temperature (C)` = Temperature, `Wind (m/s)` = Wind, `Visibility (10 m)` = Visibility) %>%
+  gather(-RentedBikeCount, key = "xaxis", value = "value") %>%
+  ggplot(aes(x = value, y = RentedBikeCount)) + 
+    geom_point() + theme_bw() +
+    stat_smooth(geom = "smooth", size = 2, level = 0.95) +
+    facet_wrap(xaxis ~ ., scales = "free_x")
+```
+```{r, message = FALSE}
+data %>%
+  select(RentedBikeCount, SolarRadiation, Rainfall, Snowfall) %>%
+  rename(`Solar radiation (MJ/m2)` = SolarRadiation, `Rainfall (mm)` = Rainfall, `Snowfall (cm)` = Snowfall) %>%
+  gather(-RentedBikeCount, key = "xaxis", value = "value") %>%
+  ggplot(aes(x = value, y = RentedBikeCount)) + 
+    geom_point() + theme_bw() +
+    stat_smooth(geom = "smooth", size = 2, level = 0.95) +
+    facet_wrap(xaxis ~ ., scales = "free_x")
+```
+```{r, warning = FALSE}
+data %>%
+  select(RentedBikeCount, Season, Holiday, Functional) %>%
+  rename(`Functional Day` = Functional) %>%
+  pivot_longer(., -RentedBikeCount, names_to = "Variable", values_to = "Value") %>%
+  ggplot(aes(x = Value, y = RentedBikeCount)) + theme_bw() + 
+    geom_boxplot() + 
+    facet_wrap(. ~ Variable, scales = "free_x")
+```
+
+
+```{r}
+get_loocv_rmse = function(model) {
+  sqrt(mean((resid(model) / (1 - hatvalues(model))) ^ 2))
+}
+```
+
+
+```{r, warning = FALSE}
+set.seed(42)
+trn_size = as.integer(0.7 * count(data))
+trn_idx = sample(nrow(data), trn_size)
+bike_trn = data[trn_idx, ]
+bike_tst = data[-trn_idx, ]
+
+model_add = lm(RentedBikeCount ~ ., data = bike_trn)
+model_fact = lm(RentedBikeCount ~ . + factor(Hour), data = bike_trn)
+model_fact2 = lm(RentedBikeCount ~ . + factor(Hour) + (Temperature * .), data = bike_trn)
+model_fact3 = lm(RentedBikeCount ~ . + factor(Hour) + (Temperature * .) + (Hour*.), data = bike_trn)
+model_fact4 = lm(RentedBikeCount ~ . + factor(Hour) + (Temperature * .) + (Humidity*.) + (Hour*.), data = bike_trn)
+model_fact5 = lm(RentedBikeCount ~ (.)^2 + factor(Hour), data = bike_trn)
+
+models = list(model_add, model_fact, model_fact2, model_fact3, model_fact4, model_fact5)
+loocv_rmse = sapply(models, get_loocv_rmse)
+bics_list = unlist(sapply(models, AIC, k = log(count(data))))
+rmse_list = sapply(models, function(x){
+  actual = bike_tst$RentedBikeCount
+  pred = predict(x, bike_tst)
+  n = length(pred)
+  sqrt(1/n * sum((actual-pred)^2))
+})
+```
+
+```{r}
+frame = cbind(loocv_rmse, bics_list, rmse_list)
+rownames(frame) = c("Additive","Hour as Factor","Interaction with Temperature",
+                    "Interaction with Temperature,Hour","Interaction with Temperature,Humidity,Hour",
+                    "All Interaction")
+colnames(frame) = c("LOOCV-RMSE","BIC","Test RMSE")
+frame = formatC(frame, digits = 2, format = "f", big.mark = ",")
+knitr::kable(frame, digits = 2, caption = "Evaluation of Models (Test RMSE of XBoost Tree = 183.80)")
+```
+
