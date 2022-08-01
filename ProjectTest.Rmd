@@ -234,7 +234,28 @@ frame2 = evaluate(models)
 rownames(frame2) = c("All Interaction", "AIC Model", "BIC Model")
 knitr::kable(frame2, digits = 2, caption = "Evaluation of Models (Test RMSE of XBoost Tree = 183.80)")
 ```
+```{r, message = FALSE}
+plot_diagnostics = function(model, title){
+  require(ggplot2)
+  require(grid)
+  require(gridExtra)
+    pcol = "grey"
+    lcol = "dodgerblue"
+    data1 = data.frame(Fitted = fitted(model), Residuals = resid(model))
+    plot1 = ggplot(data1, aes(x = Fitted, y = Residuals)) +
+      geom_point(color = pcol) + theme_bw() + geom_hline(yintercept = 0, color = lcol) + 
+      stat_smooth() +
+      ggtitle(paste("Fitted vs Residuals for",title))
+    plot2 = ggplot(data1, aes(sample = Residuals)) + 
+      stat_qq(color = pcol) + stat_qq_line(color = lcol) + theme_bw() +
+      xlab("Theoretical Quantiles") + ylab("Sample Quantiles") +
+      ggtitle(paste("Normal Q-Q Plot for",title))
+    grid.draw(arrangeGrob(plot1, plot2, nrow = 1, ncol = 2))
+}
+plot_diagnostics(bic_model, "BIC Model")
+```
 
+Try transformations of response variable to fix diagnostics
 
 ```{r, warning = FALSE}
 bike_shift = bike_trn
@@ -270,20 +291,19 @@ knitr::kable(power_RMSE, caption = "Adjusted R^2 and Test RMSE using power trans
 
 
 ```{r, warning = FALSE}
-BIC_sqrt = lm(update(bic_formula, sqrt(.) ~ . ), data = bike_trn)
-
-plot(BIC_sqrt)
+bic_sqrt = lm(update(bic_formula, sqrt(.) ~ . ), data = bike_trn)
+plot_diagnostics(bic_sqrt, "BIC Model")
 ```
 
 ```{r, warning = FALSE}
-BIC_sqrt_rmse = get_rmse(BIC_sqrt, power = 2)
-BIC_test_R2 = cor(predict(BIC_sqrt, bike_tst)^2, bike_tst$RentedBikeCount)^2
-BIC_sqrt_adj_R2 = cor(predict(BIC_sqrt, bike_trn)^2, bike_trn$RentedBikeCount)^2*summary(BIC_sqrt)$adj.r.squared/summary(BIC_sqrt)$r.squared
+bic_sqrt_rmse = get_rmse(bic_sqrt, power = 2)
+bic_test_R2 = cor(predict(bic_sqrt, bike_tst)^2, bike_tst$RentedBikeCount)^2
+bic_sqrt_adj_R2 = cor(predict(bic_sqrt, bike_trn)^2, bike_trn$RentedBikeCount)^2*summary(bic_sqrt)$adj.r.squared/summary(bic_sqrt)$r.squared
 
 
-frame3 = rbind(frame2, c(99, "N/A","N/A", formatC(BIC_sqrt_rmse, digits = 1, format = "f"), 
-                       formatC(BIC_sqrt_adj_R2, digits = 3),
-                       formatC(BIC_test_R2, digits = 3)))
+frame3 = rbind(frame2, c(99, "N/A","N/A", formatC(bic_sqrt_rmse, digits = 1, format = "f"), 
+                       formatC(bic_sqrt_adj_R2, digits = 3),
+                       formatC(bic_test_R2, digits = 3)))
 rownames(frame3) = c("All Interaction", "AIC Model", "BIC Model","BIC Model with Sqrt Transform")
 knitr::kable(frame3, caption = "Evaluation of Models Again")
 ```
