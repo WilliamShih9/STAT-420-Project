@@ -334,8 +334,8 @@ plot_error2 = ggplot(data.frame(Point = 1:50, Predicted = Predicted[1001:1050], 
 
 
 ```{r, message = FALSE}
-bike_tst$Predicted_BikeCount =  predict(bic_sqrt, bike_tst)^2
-hour_holidayerror = bike_tst %>%
+data$Predicted_BikeCount =  predict(bic_sqrt, data)^2
+hour_holidayerror = data %>%
   group_by(Hour, Holiday) %>%
   summarize(Predicted = mean(Predicted_BikeCount),
             Actual = mean(RentedBikeCount),
@@ -344,10 +344,10 @@ plot_hour_holidayerror = ggplot(hour_holidayerror, aes(x = Hour, group = Holiday
   theme_bw() +
   geom_line(aes(y = Predicted, color = "Predicted"), size = 1) +
   geom_line(aes(y = Actual, color = "Actual"), size = 1) +
-  ggtitle("Mean Actual vs Predicted Hour of Day and Holiday or No Holiday (Test Set)")
+  ggtitle("Mean Actual vs Predicted Hour of Day and Holiday or No Holiday")
 ```
 ```{r, message = FALSE}
-hour_seasonerror = bike_tst %>%
+hour_seasonerror = data %>%
   group_by(Hour, Season) %>%
   summarize(Predicted = mean(Predicted_BikeCount),
             Actual = mean(RentedBikeCount),
@@ -357,7 +357,7 @@ plot_hour_seasonerror = ggplot(hour_seasonerror, aes(x = Hour, group = Season)) 
   geom_line(aes(y = Predicted, color = Season, linetype = "Predicted"), size = 1) +
   geom_point(aes(y = Actual, color = Season, shape = "Actual"), size = 2) +
   geom_line(aes(y = Actual, color = Season, linetype = "Actual"), size = 1) +
-  ggtitle("Mean Actual vs Predicted Hour of Day and Season (Test Set)")
+  ggtitle("Mean Actual vs Predicted Hour of Day and Season")
 
 ```
 
