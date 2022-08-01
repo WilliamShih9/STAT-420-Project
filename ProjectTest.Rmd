@@ -109,22 +109,26 @@ data %>%
 get_loocv_rmse = function(model) {
   sqrt(mean((resid(model) / (1 - hatvalues(model))) ^ 2))
 }
-get_rmse = function(model){
+get_rmse = function(model, power = 1){
+  pred = predict(model, bike_tst)^power
   actual = bike_tst$RentedBikeCount
-  pred = predict(model, bike_tst)
   n = length(pred)
   sqrt(1/n * sum((actual-pred)^2))
+}
+get_R2 = function(model){
+  cor(predict(model, bike_tst), bike_tst$RentedBikeCount)^2
 }
 evaluate = function(models){
   num_coefs = sapply(models, function(x) length(coef(x)))
   loocv_rmse = sapply(models, get_loocv_rmse)
   bics_list = unlist(sapply(models, AIC, k = log(6132)))
   rmse_list = sapply(models, get_rmse)
+  R2test_list = prettyNum(sapply(models, get_R2), digits = 3, format = "f")
   R2adj_list = prettyNum(sapply(models, function(x) summary(x)$adj.r.squared), digits = 3, format = "f")
   frame = cbind(num_coefs, loocv_rmse, bics_list, rmse_list)
-  frame[,-1] = formatC(frame[,-1], digits = 2, format = "f", big.mark = ",")
-  frame = cbind(frame, R2adj_list)
-  colnames(frame) = c("Coefficients", "LOOCV-RMSE","BIC","Test RMSE","Adjusted R2")
+  frame[,-1] = formatC(frame[,-1], digits = 1, format = "f", big.mark = ",")
+  frame = cbind(frame, R2adj_list, R2test_list)
+  colnames(frame) = c("Coefficients", "LOOCV-RMSE","BIC","Test RMSE","Adjusted R2","Test R2")
   return(frame)
 }
 ```
@@ -163,16 +167,58 @@ frame = evaluate(models)
 rownames(frame) = c("Additive","Hour as Factor","Interaction with Temperature",
                     "Interaction with Temperature,Hour","Interaction with Temperature,Humidity,Hour",
                     "All Interaction", "All Interaction (Quadratic for Wind/Temp)", "All Interaction with Quadratics")
-frame = formatC(frame, digits = 2, format = "f", big.mark = ",")
 knitr::kable(frame, digits = 2, caption = "Evaluation of Models (Test RMSE of XBoost Tree = 183.80)")
 ```
 
 Once we selected the initial model we liked best based on the metrics above, we ran this through AIC and BIC procedures in an attempt to simplify the model without sacrificing accuracy to a material degree.
 
 ```{r, message = FALSE, warning = FALSE, fig.height= 15, fig.width = 15}
-aic_model = step(model_fact6, direction = "backward", trace = 0)
-bic_model = step(model_fact6, span = RentedBikeCount ~ 1, direction = "backward", k = log(6132), trace = 0)
+#aic_model = step(model_fact6, direction = "backward", trace = 0)
+#bic_model = step(model_fact6, span = RentedBikeCount ~ 1, direction = "backward", k = log(6132), trace = 0)
 
+aic_formula = formula(RentedBikeCount ~ Day + Month + Hour + Temperature + Humidity + 
+     Wind + Visibility + DewPoint + SolarRadiation + Rainfall + 
+     Snowfall + Season + Holiday + Functional + factor(Hour) + 
+     I(Temperature^2) + I(Wind^2) + Day:Month + Day:Humidity + 
+     Day:Wind + Day:Visibility + Day:SolarRadiation + Day:Season + 
+     Day:Holiday + Month:Temperature + Month:Visibility + Month:DewPoint + 
+     Month:SolarRadiation + Month:Season + Month:Holiday + Month:Functional + 
+     Hour:Temperature + Hour:Humidity + Hour:Wind + Hour:Visibility + 
+     Hour:DewPoint + Hour:SolarRadiation + Hour:Rainfall + Hour:Snowfall + 
+     Hour:Season + Hour:Holiday + Hour:Functional + Temperature:Wind + 
+     Temperature:Visibility + Temperature:DewPoint + Temperature:SolarRadiation + 
+     Temperature:Rainfall + Temperature:Season + Humidity:Wind + 
+     Humidity:Visibility + Humidity:DewPoint + Humidity:SolarRadiation + 
+     Humidity:Rainfall + Humidity:Season + Humidity:Holiday + 
+     Humidity:Functional + Wind:Visibility + Wind:DewPoint + Wind:SolarRadiation + 
+     Wind:Season + Visibility:DewPoint + Visibility:SolarRadiation + 
+     DewPoint:SolarRadiation + DewPoint:Rainfall + DewPoint:Season + 
+     DewPoint:Functional + SolarRadiation:Season + SolarRadiation:Functional + 
+     Rainfall:Snowfall + Rainfall:Season + Season:Holiday + Season:Functional + 
+     Holiday:Functional + Day:I(Temperature^2) + Month:I(Temperature^2) + 
+     Wind:I(Temperature^2) + DewPoint:I(Temperature^2) + Rainfall:I(Temperature^2) + 
+     Season:I(Temperature^2) + Holiday:I(Temperature^2) + Hour:I(Wind^2) + 
+     Temperature:I(Wind^2) + Humidity:I(Wind^2) + Wind:I(Wind^2) + 
+     Visibility:I(Wind^2) + DewPoint:I(Wind^2) + Rainfall:I(Wind^2) + 
+     Snowfall:I(Wind^2) + Season:I(Wind^2))
+bic_formula = formula(RentedBikeCount ~ Day + Month + Hour + Temperature + Humidity + 
+     Wind + Visibility + DewPoint + SolarRadiation + Rainfall + 
+     Snowfall + Season + Holiday + Functional + factor(Hour) + 
+     I(Temperature^2) + I(Wind^2) + Day:Holiday + Month:Temperature + 
+     Month:DewPoint + Month:Season + Month:Holiday + Hour:Temperature + 
+     Hour:Humidity + Hour:Wind + Hour:DewPoint + Hour:SolarRadiation + 
+     Hour:Rainfall + Hour:Holiday + Hour:Functional + Temperature:Visibility + 
+     Temperature:DewPoint + Temperature:Rainfall + Temperature:Season + 
+     Humidity:Visibility + Humidity:DewPoint + Humidity:SolarRadiation + 
+     Humidity:Season + Humidity:Functional + Wind:SolarRadiation + 
+     Wind:Rainfall + Wind:Season + Visibility:DewPoint + DewPoint:SolarRadiation + 
+     DewPoint:Rainfall + DewPoint:Season + DewPoint:Functional + 
+     SolarRadiation:Functional + Rainfall:Snowfall + Season:Holiday + 
+     Day:I(Temperature^2) + Month:I(Temperature^2) + DewPoint:I(Temperature^2) + 
+     Rainfall:I(Temperature^2) + Season:I(Temperature^2) + Holiday:I(Temperature^2) + 
+     Hour:I(Wind^2) + Season:I(Wind^2))
+aic_model = lm(aic_formula, data = bike_trn)
+bic_model = lm(bic_formula, data = bike_trn)
 anova(aic_model, model_fact6)
 anova(bic_model, model_fact6)
 
@@ -184,11 +230,64 @@ models = list(model_fact6, aic_model, bic_model)
 ```
 
 ```{r, warning = FALSE}
-frame = evaluate(models)
-rownames(frame) = c("All Interaction", "AIC Model", "BIC Model")
-frame = formatC(frame, digits = 2, format = "f", big.mark = ",")
-knitr::kable(frame, digits = 2, caption = "Evaluation of Models (Test RMSE of XBoost Tree = 183.80)")
+frame2 = evaluate(models)
+rownames(frame2) = c("All Interaction", "AIC Model", "BIC Model")
+knitr::kable(frame2, digits = 2, caption = "Evaluation of Models (Test RMSE of XBoost Tree = 183.80)")
 ```
+
+
+```{r, warning = FALSE}
+bike_shift = bike_trn
+bike_shift$RentedBikeCount = bike_shift$RentedBikeCount + 1
+bic_one = lm(bic_formula, data = bike_shift)
+bc = MASS::boxcox(bic_one)
+(lambda <- bc$x[which.max(bc$y)])
+```
+
+```{r, warning = FALSE}
+
+transformation_power = function(pow){
+  temp_data = bike_trn
+  temp_data$RentedBikeCount = temp_data$RentedBikeCount^pow
+  model = lm(bic_formula, data = temp_data)
+  R2_factor = summary(model)$adj.r.squared/summary(model)$r.squared
+  actual_test = bike_tst$RentedBikeCount
+  pred_test = (pmax(predict(model, bike_tst), 0))^(1/pow) 
+  pred_train = (pmax(predict(model, bike_trn), 0))^(1/pow) 
+  n = length(pred_test)
+  c(Adj_R2 = round(cor(pred_train, bike_trn$RentedBikeCount)^2*R2_factor, 3), 
+         Test_RMSE = round(sqrt(1/n * sum((actual_test-pred_test)^2)), 1))
+}
+try_powers = seq(0.2,1,0.1)
+power_RMSE = sapply(seq(0.2,1,0.1), transformation_power)
+
+power_RMSE  = t(power_RMSE)
+colnames(power_RMSE) = c("Adjusted R^2","Test RMSE")
+rownames(power_RMSE) = try_powers
+knitr::kable(power_RMSE, caption = "Adjusted R^2 and Test RMSE using power transformations of response variable of BIC model (Predictions Clamped at 0)")
+```
+
+
+
+```{r, warning = FALSE}
+BIC_sqrt = lm(update(bic_formula, sqrt(.) ~ . ), data = bike_trn)
+
+plot(BIC_sqrt)
+```
+
+```{r, warning = FALSE}
+BIC_sqrt_rmse = get_rmse(BIC_sqrt, power = 2)
+BIC_test_R2 = cor(predict(BIC_sqrt, bike_tst)^2, bike_tst$RentedBikeCount)^2
+BIC_sqrt_adj_R2 = cor(predict(BIC_sqrt, bike_trn)^2, bike_trn$RentedBikeCount)^2*summary(BIC_sqrt)$adj.r.squared/summary(BIC_sqrt)$r.squared
+
+
+frame3 = rbind(frame2, c(99, "N/A","N/A", formatC(BIC_sqrt_rmse, digits = 1, format = "f"), 
+                       formatC(BIC_sqrt_adj_R2, digits = 3),
+                       formatC(BIC_test_R2, digits = 3)))
+rownames(frame3) = c("All Interaction", "AIC Model", "BIC Model","BIC Model with Sqrt Transform")
+knitr::kable(frame3, caption = "Evaluation of Models Again")
+```
+
 
 ## Results
 
