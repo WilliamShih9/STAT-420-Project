@@ -27,6 +27,7 @@ require(dplyr)
 library(tidyr)
 library(ggplot2)
 library(car)
+library(kableExtra)
 colnames = c("Date","RentedBikeCount","Hour","Temperature","Humidity","Wind","Visibility",
              "DewPoint","SolarRadiation","Rainfall","Snowfall","Season","Holiday","Functional")
 data = read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/00560/SeoulBikeData.csv",
@@ -167,7 +168,8 @@ frame = evaluate(models)
 rownames(frame) = c("Additive","Hour as Factor","Interaction with Temperature",
                     "Interaction with Temperature,Hour","Interaction with Temperature,Humidity,Hour",
                     "All Interaction", "All Interaction (Quadratic for Wind/Temp)", "All Interaction with Quadratics")
-knitr::kable(frame, digits = 2, caption = "Evaluation of Models (Test RMSE of XBoost Tree = 183.80)")
+kable(frame, digits = 2, caption = "Evaluation of Models (Test RMSE of XBoost Tree = 183.80)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 ```
 
 Once we selected the initial model we liked best based on the metrics above, we ran this through AIC and BIC procedures in an attempt to simplify the model without sacrificing accuracy to a material degree.
@@ -232,7 +234,8 @@ models = list(model_fact6, aic_model, bic_model)
 ```{r, warning = FALSE}
 frame2 = evaluate(models)
 rownames(frame2) = c("All Interaction", "AIC Model", "BIC Model")
-knitr::kable(frame2, digits = 2, caption = "Evaluation of Models (Test RMSE of XBoost Tree = 183.80)")
+kable(frame2, digits = 2, caption = "Evaluation of Models (Test RMSE of XBoost Tree = 183.80)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 ```
 ```{r, message = FALSE}
 plot_diagnostics = function(model, title){
@@ -285,7 +288,9 @@ power_RMSE = sapply(seq(0.2,1,0.1), transformation_power)
 power_RMSE  = t(power_RMSE)
 colnames(power_RMSE) = c("Adjusted R^2","Test RMSE")
 rownames(power_RMSE) = try_powers
-knitr::kable(power_RMSE, caption = "Adjusted R^2 and Test RMSE using power transformations of response variable of BIC model (Predictions Clamped at 0)")
+kable(power_RMSE, caption = "Adjusted R^2 and Test RMSE using power transformations of response variable of BIC model (Predictions Clamped at 0)") %>%
+  column_spec(2, bold = power_RMSE[,1] == max(power_RMSE[,1])) %>% column_spec(3, bold = power_RMSE[,2] == min(power_RMSE[,2])) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 ```
 
 
@@ -304,8 +309,9 @@ bic_sqrt_adj_R2 = cor(predict(bic_sqrt, bike_trn)^2, bike_trn$RentedBikeCount)^2
 frame3 = rbind(frame2, c(99, "N/A","N/A", formatC(bic_sqrt_rmse, digits = 1, format = "f"), 
                        formatC(bic_sqrt_adj_R2, digits = 3),
                        formatC(bic_test_R2, digits = 3)))
-rownames(frame3) = c("All Interaction", "AIC Model", "BIC Model","BIC Model with Sqrt Transform")
-knitr::kable(frame3, caption = "Evaluation of Models Again")
+rownames(frame3) = c("All Interaction", "AIC Model", "BIC Model","BIC Model with Sqrt Transform") 
+kable(frame3, caption = "Evaluation of Models Again") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 ```
 
 
