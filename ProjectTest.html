@@ -730,18 +730,28 @@ get_rmse = function(model, power = 1){
 get_R2 = function(model){
   cor(predict(model, bike_tst), bike_tst$RentedBikeCount)^2
 }
-evaluate = function(models){
+evaluate = function(models, row_names){
   num_coefs = sapply(models, function(x) length(coef(x)))
   loocv_rmse = sapply(models, get_loocv_rmse)
   bics_list = unlist(sapply(models, AIC, k = log(6132)))
   rmse_list = sapply(models, get_rmse)
-  R2test_list = prettyNum(sapply(models, get_R2), digits = 3, format = &quot;f&quot;)
-  R2adj_list = prettyNum(sapply(models, function(x) summary(x)$adj.r.squared), digits = 3, format = &quot;f&quot;)
-  frame = cbind(num_coefs, loocv_rmse, bics_list, rmse_list)
-  frame[,-1] = formatC(frame[,-1], digits = 1, format = &quot;f&quot;, big.mark = &quot;,&quot;)
-  frame = cbind(frame, R2adj_list, R2test_list)
+  R2test_list = sapply(models, get_R2)
+  R2adj_list = sapply(models, function(x) summary(x)$adj.r.squared)
+  frame = cbind(num_coefs, loocv_rmse, bics_list, rmse_list, R2test_list, R2adj_list)
   colnames(frame) = c(&quot;Coefficients&quot;, &quot;LOOCV-RMSE&quot;,&quot;BIC&quot;,&quot;Test RMSE&quot;,&quot;Adjusted R2&quot;,&quot;Test R2&quot;)
+  rownames(frame) = row_names
   return(frame)
+}
+get_table = function(frame, title){
+  # Minimum for 2,3,4 
+  # Maximum for 5,6
+  kable(frame, digits = c(0,1,1,1,3,3), caption = title, format.args = list(big.mark = &quot;,&quot;)) %&gt;%
+    column_spec(3, bold = (frame[,2] == min(frame[,2]))) %&gt;%
+    column_spec(4, bold = (frame[,3] == min(frame[,3]))) %&gt;%
+    column_spec(5, bold = (frame[,4] == min(frame[,4]))) %&gt;%
+    column_spec(6, bold = (frame[,5] == max(frame[,5]))) %&gt;%
+    column_spec(7, bold = (frame[,6] == max(frame[,6]))) %&gt;%
+    kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;bordered&quot;, &quot;condensed&quot;, &quot;responsive&quot;))
 }</code></pre>
 <p>We then split our data into ‘Train’ and ‘Test’ data sets. We used a
 70/30 split Train/Test, where we would build our model on the ‘Train’
@@ -770,36 +780,34 @@ form_2 = as.formula(
 model_fact6 = lm(RentedBikeCount ~ (.)^2 + factor(Hour) + I(Temperature^2)*. + I(Wind^2)*., data = bike_trn)
 model_fact7 = lm(form_2, data = bike_trn)
 models = list(model_add, model_fact, model_fact2, model_fact3, model_fact4, model_fact5, model_fact6, model_fact7)</code></pre>
-<pre class="r"><code>frame = evaluate(models)
-rownames(frame) = c(&quot;Additive&quot;,&quot;Hour as Factor&quot;,&quot;Interaction with Temperature&quot;,
+<pre class="r"><code>frame = evaluate(models, row_names = c(&quot;Additive&quot;,&quot;Hour as Factor&quot;,&quot;Interaction with Temperature&quot;,
                     &quot;Interaction with Temperature,Hour&quot;,&quot;Interaction with Temperature,Humidity,Hour&quot;,
-                    &quot;All Interaction&quot;, &quot;All Interaction (Quadratic for Wind/Temp)&quot;, &quot;All Interaction with Quadratics&quot;)
-kable(frame, digits = 2, caption = &quot;Evaluation of Models (Test RMSE of XBoost Tree = 183.80)&quot;) %&gt;%
-  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;))</code></pre>
-<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+                    &quot;All Interaction&quot;, &quot;All Interaction (Quadratic for Wind/Temp)&quot;, &quot;All Interaction with Quadratics&quot;))
+get_table(frame, title = &quot;Evaluation of Models (Test RMSE of XBoost Tree = 183.80&quot;)</code></pre>
+<table class="table table-striped table-hover table-bordered table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
 <caption>
-Evaluation of Models (Test RMSE of XBoost Tree = 183.80)
+Evaluation of Models (Test RMSE of XBoost Tree = 183.80
 </caption>
 <thead>
 <tr>
 <th style="text-align:left;">
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 Coefficients
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 LOOCV-RMSE
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 BIC
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 Test RMSE
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 Adjusted R2
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 Test R2
 </th>
 </tr>
@@ -809,184 +817,184 @@ Test R2
 <td style="text-align:left;">
 Additive
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 17
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 439.4
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 92,153.3
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 418.9
 </td>
-<td style="text-align:left;">
-0.548
-</td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 0.556
+</td>
+<td style="text-align:right;">
+0.548
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
 Hour as Factor
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 40
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 380.9
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 90,542.2
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 367.4
 </td>
-<td style="text-align:left;">
-0.662
-</td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 0.658
+</td>
+<td style="text-align:right;">
+0.662
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
 Interaction with Temperature
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 55
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 321.5
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 88,550.1
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 311.9
 </td>
-<td style="text-align:left;">
-0.76
-</td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 0.754
+</td>
+<td style="text-align:right;">
+0.760
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
 Interaction with Temperature,Hour
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 69
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 306.6
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 88,054.9
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 297.1
 </td>
-<td style="text-align:left;">
-0.783
-</td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 0.777
+</td>
+<td style="text-align:right;">
+0.783
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
 Interaction with Temperature,Humidity,Hour
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 82
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 299.9
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 87,882.9
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 293.0
 </td>
-<td style="text-align:left;">
-0.792
-</td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 0.783
+</td>
+<td style="text-align:right;">
+0.792
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
 All Interaction
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 157
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 289.4
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 87,775.2
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 280.6
 </td>
-<td style="text-align:left;">
-0.813
-</td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 0.801
+</td>
+<td style="text-align:right;">
+0.813
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
 All Interaction (Quadratic for Wind/Temp)
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 191
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;font-weight: bold;">
 276.4
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;font-weight: bold;">
 87,338.9
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;font-weight: bold;">
 268.6
 </td>
-<td style="text-align:left;">
-0.833
-</td>
-<td style="text-align:left;">
+<td style="text-align:right;font-weight: bold;">
 0.817
+</td>
+<td style="text-align:right;">
+0.833
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
 All Interaction with Quadratics
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 310
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 383.4
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 87,548.1
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 324.3
 </td>
-<td style="text-align:left;">
-0.851
-</td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 0.746
+</td>
+<td style="text-align:right;font-weight: bold;">
+0.851
 </td>
 </tr>
 </tbody>
@@ -1116,11 +1124,9 @@ anova(aic_model, model_fact6)</code></pre>
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
 <pre class="r"><code>#Initial model comparison, based on LOOCV-RMSE, BIC and Test RMSE
 models = list(model_fact6, aic_model, bic_model)</code></pre>
-<pre class="r"><code>frame2 = evaluate(models)
-rownames(frame2) = c(&quot;All Interaction&quot;, &quot;AIC Model&quot;, &quot;BIC Model&quot;)
-kable(frame2, digits = 2, caption = &quot;Evaluation of Models (Test RMSE of XBoost Tree = 183.80)&quot;) %&gt;%
-  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;))</code></pre>
-<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<pre class="r"><code>frame2 = evaluate(models, row_names = c(&quot;All Interaction&quot;, &quot;AIC Model&quot;, &quot;BIC Model&quot;))
+get_table(frame2, title = &quot;Evaluation of Models (Test RMSE of XBoost Tree = 183.80)&quot;)</code></pre>
+<table class="table table-striped table-hover table-bordered table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
 <caption>
 Evaluation of Models (Test RMSE of XBoost Tree = 183.80)
 </caption>
@@ -1128,22 +1134,22 @@ Evaluation of Models (Test RMSE of XBoost Tree = 183.80)
 <tr>
 <th style="text-align:left;">
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 Coefficients
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 LOOCV-RMSE
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 BIC
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 Test RMSE
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 Adjusted R2
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 Test R2
 </th>
 </tr>
@@ -1153,69 +1159,69 @@ Test R2
 <td style="text-align:left;">
 All Interaction
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 191
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 276.4
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 87,338.9
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;font-weight: bold;">
 268.6
 </td>
-<td style="text-align:left;">
-0.833
-</td>
-<td style="text-align:left;">
+<td style="text-align:right;font-weight: bold;">
 0.817
+</td>
+<td style="text-align:right;">
+0.833
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
 AIC Model
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 140
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;font-weight: bold;">
 270.9
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 86,942.5
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 268.6
 </td>
-<td style="text-align:left;">
-0.834
-</td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 0.817
+</td>
+<td style="text-align:right;font-weight: bold;">
+0.834
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
 BIC Model
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 99
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 271.3
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;font-weight: bold;">
 86,754.3
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 269.7
 </td>
-<td style="text-align:left;">
-0.831
-</td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 0.816
+</td>
+<td style="text-align:right;">
+0.831
 </td>
 </tr>
 </tbody>
@@ -1256,8 +1262,8 @@ bc = MASS::boxcox(bic_one)</code></pre>
   pred_test = (pmax(predict(model, bike_tst), 0))^(1/pow) 
   pred_train = (pmax(predict(model, bike_trn), 0))^(1/pow) 
   n = length(pred_test)
-  c(Adj_R2 = round(cor(pred_train, bike_trn$RentedBikeCount)^2*R2_factor, 3), 
-         Test_RMSE = round(sqrt(1/n * sum((actual_test-pred_test)^2)), 1))
+  c(Adj_R2 = cor(pred_train, bike_trn$RentedBikeCount)^2*R2_factor, 
+         Test_RMSE = sqrt(1/n * sum((actual_test-pred_test)^2)))
 }
 try_powers = seq(0.2,1,0.1)
 power_RMSE = sapply(seq(0.2,1,0.1), transformation_power)
@@ -1265,10 +1271,10 @@ power_RMSE = sapply(seq(0.2,1,0.1), transformation_power)
 power_RMSE  = t(power_RMSE)
 colnames(power_RMSE) = c(&quot;Adjusted R^2&quot;,&quot;Test RMSE&quot;)
 rownames(power_RMSE) = try_powers
-kable(power_RMSE, caption = &quot;Adjusted R^2 and Test RMSE using power transformations of response variable of BIC model (Predictions Clamped at 0)&quot;) %&gt;%
+kable(power_RMSE, digits = c(3,1), caption = &quot;Adjusted R^2 and Test RMSE using power transformations of response variable of BIC model (Predictions Clamped at 0)&quot;) %&gt;%
   column_spec(2, bold = power_RMSE[,1] == max(power_RMSE[,1])) %&gt;% column_spec(3, bold = power_RMSE[,2] == min(power_RMSE[,2])) %&gt;%
-  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;))</code></pre>
-<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;bordered&quot;, &quot;condensed&quot;, &quot;responsive&quot;))</code></pre>
+<table class="table table-striped table-hover table-bordered table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
 <caption>
 Adjusted R^2 and Test RMSE using power transformations of response
 variable of BIC model (Predictions Clamped at 0)
@@ -1396,13 +1402,11 @@ bic_test_R2 = cor(predict(bic_sqrt, bike_tst)^2, bike_tst$RentedBikeCount)^2
 bic_sqrt_adj_R2 = cor(predict(bic_sqrt, bike_trn)^2, bike_trn$RentedBikeCount)^2*summary(bic_sqrt)$adj.r.squared/summary(bic_sqrt)$r.squared
 
 
-frame3 = rbind(frame2, c(99, &quot;N/A&quot;,&quot;N/A&quot;, formatC(bic_sqrt_rmse, digits = 1, format = &quot;f&quot;), 
-                       formatC(bic_sqrt_adj_R2, digits = 3),
-                       formatC(bic_test_R2, digits = 3)))
+frame3 = rbind(frame2, c(99, NA, NA, bic_sqrt_rmse, bic_sqrt_adj_R2, bic_test_R2))
 rownames(frame3) = c(&quot;All Interaction&quot;, &quot;AIC Model&quot;, &quot;BIC Model&quot;,&quot;BIC Model with Sqrt Transform&quot;) 
-kable(frame3, caption = &quot;Evaluation of Models Again&quot;) %&gt;%
-  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;))</code></pre>
-<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+kable(frame3, digits = c(0,1,1,1,3,3), caption = &quot;Evaluation of Models Again&quot;) %&gt;%
+  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;bordered&quot;, &quot;condensed&quot;, &quot;responsive&quot;))</code></pre>
+<table class="table table-striped table-hover table-bordered table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
 <caption>
 Evaluation of Models Again
 </caption>
@@ -1410,22 +1414,22 @@ Evaluation of Models Again
 <tr>
 <th style="text-align:left;">
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 Coefficients
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 LOOCV-RMSE
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 BIC
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 Test RMSE
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 Adjusted R2
 </th>
-<th style="text-align:left;">
+<th style="text-align:right;">
 Test R2
 </th>
 </tr>
@@ -1435,92 +1439,92 @@ Test R2
 <td style="text-align:left;">
 All Interaction
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 191
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 276.4
 </td>
-<td style="text-align:left;">
-87,338.9
+<td style="text-align:right;">
+87338.9
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 268.6
 </td>
-<td style="text-align:left;">
-0.833
-</td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 0.817
+</td>
+<td style="text-align:right;">
+0.833
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
 AIC Model
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 140
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 270.9
 </td>
-<td style="text-align:left;">
-86,942.5
+<td style="text-align:right;">
+86942.5
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 268.6
 </td>
-<td style="text-align:left;">
-0.834
-</td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 0.817
+</td>
+<td style="text-align:right;">
+0.834
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
 BIC Model
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 99
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 271.3
 </td>
-<td style="text-align:left;">
-86,754.3
+<td style="text-align:right;">
+86754.3
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 269.7
 </td>
-<td style="text-align:left;">
-0.831
-</td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 0.816
+</td>
+<td style="text-align:right;">
+0.831
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
 BIC Model with Sqrt Transform
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 99
 </td>
-<td style="text-align:left;">
-N/A
+<td style="text-align:right;">
+NA
 </td>
-<td style="text-align:left;">
-N/A
+<td style="text-align:right;">
+NA
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 251.8
 </td>
-<td style="text-align:left;">
+<td style="text-align:right;">
 0.858
 </td>
-<td style="text-align:left;">
-0.84
+<td style="text-align:right;">
+0.840
 </td>
 </tr>
 </tbody>
