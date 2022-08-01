@@ -19,10 +19,14 @@ A further description of the dataset can be found at https://archive.ics.uci.edu
 
 ## Methods
 
-```{r, message = FALSE, warning = FALSE}
+We began by importing and cleaning the raw data from the dataset described above.  As part of this, we transformed several predictors into Factor and Integer variables.  We also broke out the 'Date' field into 'Day', 'Month' and 'Year'.  We eventually discarded the 'Year' predictor, as our model will be focused on predicting usage for future years (and this will enable a 'year agnostic' model to predict usage regardless of yearly data).
+
+```{r, message = FALSE, warning = FALSE, fig.height= 15, fig.width = 15}
 #Load the bike sharing data into R
 require(dplyr)
 library(tidyr)
+library(ggplot2)
+library(car)
 colnames = c("Date","RentedBikeCount","Hour","Temperature","Humidity","Wind","Visibility",
              "DewPoint","SolarRadiation","Rainfall","Snowfall","Season","Holiday","Functional")
 data = read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/00560/SeoulBikeData.csv",
@@ -42,34 +46,154 @@ data$Month = as.integer(data$Month)
 data$Year = as.integer(data$Year)
 
 #Remove 'Year' as this won't be a good predictor for future years
-data = subset(data, select = c("Day","Month","RentedBikeCount","Hour","Temperature",
-                               "Humidity","Wind","Visibility","DewPoint","SolarRadiation",
-                               "Rainfall","Snowfall","Season","Holiday","Functional"))
+data = select(data, -Year)
+
+```
+
+We investigated the data, particularly how predictors related to each other through collinearity.  Below is a correlation plot describing each.  Temperature and (to a lesser degree) Humidity both had high correlation to Dewpoint.
+
+```{r, warning = FALSE}
+correlations = round(cor(data %>% select(-c(Day, Month, Season, Holiday, Functional))), 2)
+cor_melt = reshape2::melt(correlations)
+ggplot(cor_melt, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  xlab("x") + ylab("y") + ggtitle("Correlation Plot") +
+  scale_fill_gradient2(low = "#075AFF",
+                       mid = "#FFFFCC",
+                       high = "#FF0000") +
+  geom_label(aes(label = value), color = "black", label.size = NA)
+```
+
+We looked at the response 'RentedBikeCount' as it relates to the various predictors we have available.  Below we compared time and date (Day, Month and Hour), as well as environment predictors like temperature, humidity, rainfall, snowfall, solar radiation, etc.
+
+```{r, warning = FALSE}
+data %>%
+  select(RentedBikeCount, Hour, Day, Month) %>%
+  gather(-RentedBikeCount, key = "xaxis", value = "value") %>%
+  ggplot(aes(x = value, y = RentedBikeCount)) + 
+    geom_point() + theme_bw() +
+    stat_smooth(geom = "smooth", size = 2, level = 0.95) +
+    facet_wrap(xaxis ~ ., scales = "free_x")
+```
 
 
-#Temporary to use for understanding data/analysis
-#str(data)
-#View(data)
-plot(RentedBikeCount ~ ., data = data, col = "dodgerblue")
 
+```{r, warning = FALSE}
+data %>%
+  select(RentedBikeCount, Temperature, Humidity, Wind, Visibility) %>%
+  rename(`Humidity (%)` = Humidity, `Temperature (C)` = Temperature, `Wind (m/s)` = Wind, `Visibility (10 m)` = Visibility) %>%
+  gather(-RentedBikeCount, key = "xaxis", value = "value") %>%
+  ggplot(aes(x = value, y = RentedBikeCount)) + 
+    geom_point() + theme_bw() +
+    stat_smooth(geom = "smooth", size = 2, level = 0.95) +
+    facet_wrap(xaxis ~ ., scales = "free_x")
+```
+
+
+```{r, message = FALSE}
+data %>%
+  select(RentedBikeCount, SolarRadiation, Rainfall, Snowfall) %>%
+  rename(`Solar radiation (MJ/m2)` = SolarRadiation, `Rainfall (mm)` = Rainfall, `Snowfall (cm)` = Snowfall) %>%
+  gather(-RentedBikeCount, key = "xaxis", value = "value") %>%
+  ggplot(aes(x = value, y = RentedBikeCount)) + 
+    geom_point() + theme_bw() +
+    stat_smooth(geom = "smooth", size = 2, level = 0.95) +
+    facet_wrap(xaxis ~ ., scales = "free_x")
+```
+
+
+```{r, warning = FALSE}
+data %>%
+  select(RentedBikeCount, Season, Holiday, Functional) %>%
+  rename(`Functional Day` = Functional) %>%
+  pivot_longer(., -RentedBikeCount, names_to = "Variable", values_to = "Value") %>%
+  ggplot(aes(x = Value, y = RentedBikeCount)) + theme_bw() + 
+    geom_boxplot() + 
+    facet_wrap(. ~ Variable, scales = "free_x")
+```
+
+
+
+```{r}
+get_loocv_rmse = function(model) {
+  sqrt(mean((resid(model) / (1 - hatvalues(model))) ^ 2))
+}
+```
+
+We then split our data into 'Train' and 'Test' data sets.  We used a 70/30 split Train/Test, where we would build our model on the 'Train' data and test its performance on the 'Test' dataset.
+
+```{r, message = FALSE, warning = FALSE, fig.height= 15, fig.width = 15}
 #Split data into training and test data
 set.seed(42)
 trn_size = as.integer(0.7 * count(data))
 trn_idx = sample(nrow(data), trn_size)
 bike_trn = data[trn_idx, ]
 bike_tst = data[-trn_idx, ]
+```
 
-#Model building and selection
-model_full_add = lm(RentedBikeCount ~ ., data = bike_trn)
-summary(model_full_add)
+We began with several initial models - an multiple linear regressions (MLR) additive model and several interaction models, ending will a "full" interaction model with all two-way interaction between the predictors.  We decided to use three metrics to test the validity of variable subset selection: LOOCV-RMSE, BIC and Test RMSE.
 
-n = length(resid(model_full_add))
-aic_model = step(model_full_add, direction = "backward")
-bic_model = step(model_full_add, span = RentedBikeCount ~ 1, direction = "backward", k = log(n))
+```{r, message = FALSE, warning = FALSE, fig.height= 15, fig.width = 15}
+#Initial model starting points
+model_add = lm(RentedBikeCount ~ ., data = bike_trn)
+model_fact = lm(RentedBikeCount ~ . + factor(Hour), data = bike_trn)
+model_fact2 = lm(RentedBikeCount ~ . + factor(Hour) + (Temperature * .), data = bike_trn)
+model_fact3 = lm(RentedBikeCount ~ . + factor(Hour) + (Temperature * .) + (Hour*.), data = bike_trn)
+model_fact4 = lm(RentedBikeCount ~ . + factor(Hour) + (Temperature * .) + (Humidity*.) + (Hour*.), data = bike_trn)
+model_fact5 = lm(RentedBikeCount ~ (.)^2 + factor(Hour), data = bike_trn)
 
-anova(aic_model, model_full_add)
-anova(bic_model, model_full_add)
+#Initial model comparison, based on LOOCV-RMSE, BIC and Test RMSE
+models = list(model_add, model_fact, model_fact2, model_fact3, model_fact4, model_fact5)
+loocv_rmse = sapply(models, get_loocv_rmse)
+bics_list = unlist(sapply(models, AIC, k = log(count(data))))
+rmse_list = sapply(models, function(x){
+  actual = bike_tst$RentedBikeCount
+  pred = predict(x, bike_tst)
+  n = length(pred)
+  sqrt(1/n * sum((actual-pred)^2))
+})
+```
 
+```{r}
+frame = cbind(loocv_rmse, bics_list, rmse_list)
+rownames(frame) = c("Additive","Hour as Factor","Interaction with Temperature",
+                    "Interaction with Temperature,Hour","Interaction with Temperature,Humidity,Hour",
+                    "All Interaction")
+colnames(frame) = c("LOOCV-RMSE","BIC","Test RMSE")
+frame = formatC(frame, digits = 2, format = "f", big.mark = ",")
+knitr::kable(frame, digits = 2, caption = "Evaluation of Models (Test RMSE of XBoost Tree = 183.80)")
+```
+
+Once we selected the initial model we liked best based on the metrics above, we ran this through AIC and BIC procedures in an attempt to simplify the model without sacrificing accuracy to a material degree.
+
+```{r, message = FALSE, warning = FALSE, fig.height= 15, fig.width = 15}
+aic_model = step(model_fact5, direction = "backward", trace = 0)
+bic_model = step(model_fact5, span = RentedBikeCount ~ 1, direction = "backward", k = log(6132), trace = 0)
+
+anova(aic_model, model_fact5)
+anova(bic_model, model_fact5)
+
+```
+```{r message=FALSE, warning=FALSE}
+#Initial model comparison, based on LOOCV-RMSE, BIC and Test RMSE
+models = list(model_fact5, aic_model, bic_model)
+loocv_rmse = sapply(models, get_loocv_rmse)
+bics_list = unlist(sapply(models, AIC, k = log(count(data))))
+rmse_list = sapply(models, function(x){
+  actual = bike_tst$RentedBikeCount
+  pred = predict(x, bike_tst)
+  n = length(pred)
+  sqrt(1/n * sum((actual-pred)^2))
+})
+```
+
+```{r}
+frame = cbind(loocv_rmse, bics_list, rmse_list)
+rownames(frame) = c("All Interaction", "AIC Model", "BIC Model")
+colnames(frame) = c("LOOCV-RMSE","BIC","Test RMSE")
+frame = formatC(frame, digits = 2, format = "f", big.mark = ",")
+knitr::kable(frame, digits = 2, caption = "Evaluation of Models (Test RMSE of XBoost Tree = 183.80)")
 ```
 
 ## Results
