@@ -126,7 +126,7 @@ evaluate = function(models, row_names){
   rmse_list = sapply(models, get_rmse)
   R2test_list = sapply(models, get_R2)
   R2adj_list = sapply(models, function(x) summary(x)$adj.r.squared)
-  frame = cbind(num_coefs, loocv_rmse, bics_list, rmse_list, R2test_list, R2adj_list)
+  frame = cbind(num_coefs, loocv_rmse, bics_list, rmse_list, R2adj_list, R2test_list)
   colnames(frame) = c("Coefficients", "LOOCV-RMSE","BIC","Test RMSE","Adjusted R2","Test R2")
   rownames(frame) = row_names
   return(frame)
@@ -141,6 +141,36 @@ get_table = function(frame, title){
     column_spec(6, bold = (frame[,5] == max(frame[,5]))) %>%
     column_spec(7, bold = (frame[,6] == max(frame[,6]))) %>%
     kable_styling(bootstrap_options = c("striped", "hover", "bordered", "condensed", "responsive"))
+}
+plot_diagnostics = function(model, title){
+  require(ggplot2)
+  require(grid)
+  require(gridExtra)
+    pcol = "grey"
+    lcol = "dodgerblue"
+    data1 = data.frame(Fitted = fitted(model), Residuals = resid(model))
+    plot1 = ggplot(data1, aes(x = Fitted, y = Residuals)) +
+      geom_point(color = pcol) + theme_bw() + geom_hline(yintercept = 0, color = lcol) + 
+      stat_smooth() +
+      ggtitle(paste("Fitted vs Residuals for\n",title))
+    plot2 = ggplot(data1, aes(sample = Residuals)) + 
+      stat_qq(color = pcol) + stat_qq_line(color = lcol) + theme_bw() +
+      xlab("Theoretical Quantiles") + ylab("Sample Quantiles") +
+      ggtitle(paste("Normal Q-Q Plot for\n",title))
+    arrangeGrob(plot1, plot2, nrow = 1, ncol = 2)
+}
+
+transformation_power = function(pow){
+  temp_data = bike_trn
+  temp_data$RentedBikeCount = temp_data$RentedBikeCount^pow
+  model = lm(bic_formula, data = temp_data)
+  R2_factor = summary(model)$adj.r.squared/summary(model)$r.squared
+  actual_test = bike_tst$RentedBikeCount
+  pred_test = (pmax(predict(model, bike_tst), 0))^(1/pow) 
+  pred_train = (pmax(predict(model, bike_trn), 0))^(1/pow) 
+  n = length(pred_test)
+  c(Adj_R2 = cor(pred_train, bike_trn$RentedBikeCount)^2*R2_factor, 
+         Test_RMSE = sqrt(1/n * sum((actual_test-pred_test)^2)))
 }
 ```
 
@@ -177,7 +207,7 @@ models = list(model_add, model_fact, model_fact2, model_fact3, model_fact4, mode
 frame = evaluate(models, row_names = c("Additive","Hour as Factor","Interaction with Temp",
                     "Interaction with Temp,Hour","Interaction with Temp,Humidity,Hour",
                     "All Interaction", "All Interaction (Quadratic for Wind/Temp)", "All Interaction with Quadratics"))
-get_table(frame, title = "Evaluation of Models (Test RMSE of XBoost Tree = 183.80")
+table_eval1 = get_table(frame, title = "Evaluation of Models (Test RMSE of XBoost Tree = 183.80")
 ```
 
 Once we selected the initial model we liked best based on the metrics above, we ran this through AIC and BIC procedures in an attempt to simplify the model without sacrificing accuracy to a material degree.
@@ -241,27 +271,12 @@ models = list(model_fact6, aic_model, bic_model)
 
 ```{r, warning = FALSE}
 frame2 = evaluate(models, row_names = c("All Interaction", "AIC Model", "BIC Model"))
-get_table(frame2, title = "Evaluation of Models (Test RMSE of XBoost Tree = 183.80)")
+table_eval2 = get_table(frame2, title = "Evaluation of Models (Test RMSE of XBoost Tree = 183.80)")
 ```
+
+
 ```{r, message = FALSE}
-plot_diagnostics = function(model, title){
-  require(ggplot2)
-  require(grid)
-  require(gridExtra)
-    pcol = "grey"
-    lcol = "dodgerblue"
-    data1 = data.frame(Fitted = fitted(model), Residuals = resid(model))
-    plot1 = ggplot(data1, aes(x = Fitted, y = Residuals)) +
-      geom_point(color = pcol) + theme_bw() + geom_hline(yintercept = 0, color = lcol) + 
-      stat_smooth() +
-      ggtitle(paste("Fitted vs Residuals for",title))
-    plot2 = ggplot(data1, aes(sample = Residuals)) + 
-      stat_qq(color = pcol) + stat_qq_line(color = lcol) + theme_bw() +
-      xlab("Theoretical Quantiles") + ylab("Sample Quantiles") +
-      ggtitle(paste("Normal Q-Q Plot for",title))
-    grid.draw(arrangeGrob(plot1, plot2, nrow = 1, ncol = 2))
-}
-plot_diagnostics(bic_model, "BIC Model")
+plot_diag1 = plot_diagnostics(bic_model, "BIC Model with no Transform")
 ```
 
 Try transformations of response variable to fix diagnostics
@@ -275,26 +290,11 @@ bc = MASS::boxcox(bic_one)
 ```
 
 ```{r, warning = FALSE}
-
-transformation_power = function(pow){
-  temp_data = bike_trn
-  temp_data$RentedBikeCount = temp_data$RentedBikeCount^pow
-  model = lm(bic_formula, data = temp_data)
-  R2_factor = summary(model)$adj.r.squared/summary(model)$r.squared
-  actual_test = bike_tst$RentedBikeCount
-  pred_test = (pmax(predict(model, bike_tst), 0))^(1/pow) 
-  pred_train = (pmax(predict(model, bike_trn), 0))^(1/pow) 
-  n = length(pred_test)
-  c(Adj_R2 = cor(pred_train, bike_trn$RentedBikeCount)^2*R2_factor, 
-         Test_RMSE = sqrt(1/n * sum((actual_test-pred_test)^2)))
-}
 try_powers = seq(0.2,1,0.1)
-power_RMSE = sapply(seq(0.2,1,0.1), transformation_power)
-
-power_RMSE  = t(power_RMSE)
+power_RMSE = t(sapply(seq(0.2,1,0.1), transformation_power))
 colnames(power_RMSE) = c("Adjusted R^2","Test RMSE")
 rownames(power_RMSE) = try_powers
-kable(power_RMSE, digits = c(3,1), caption = "Adjusted R^2 and Test RMSE using power transformations of response variable of BIC model (Predictions Clamped at 0)") %>%
+table_transform = kable(power_RMSE, digits = c(3,1), caption = "Adjusted R^2 and Test RMSE using power transformations of response variable of BIC model (Predictions Clamped at 0)") %>%
   column_spec(2, bold = power_RMSE[,1] == max(power_RMSE[,1])) %>% column_spec(3, bold = power_RMSE[,2] == min(power_RMSE[,2])) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "bordered", "condensed", "responsive"))
 ```
@@ -303,7 +303,7 @@ kable(power_RMSE, digits = c(3,1), caption = "Adjusted R^2 and Test RMSE using p
 
 ```{r, warning = FALSE}
 bic_sqrt = lm(update(bic_formula, sqrt(.) ~ . ), data = bike_trn)
-plot_diagnostics(bic_sqrt, "BIC Model")
+plot_diag2 = plot_diagnostics(bic_sqrt, "BIC Model with Transform")
 ```
 
 ```{r, warning = FALSE}
@@ -314,13 +314,37 @@ bic_sqrt_adj_R2 = cor(predict(bic_sqrt, bike_trn)^2, bike_trn$RentedBikeCount)^2
 
 frame3 = rbind(frame2, c(99, NA, NA, bic_sqrt_rmse, bic_sqrt_adj_R2, bic_test_R2))
 rownames(frame3) = c("All Interaction", "AIC Model", "BIC Model","BIC Model with Sqrt Transform") 
-kable(frame3, digits = c(0,1,1,1,3,3), caption = "Evaluation of Models Again",
+table_eval3 = kable(frame3, digits = c(0,1,1,1,3,3), caption = "Evaluation of Models Again",
       format.args = list(big.mark = ",")) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "bordered", "condensed", "responsive"))
 ```
 
 
 ## Results
+
+
+```{r}
+table_eval1
+```
+
+```{r}
+grid.draw(plot_diag1)
+```
+
+```{r}
+table_transform
+```
+
+```{r}
+grid.draw(plot_diag2)
+```
+
+
+```{r}
+table_eval3
+```
+
+
 
 ## Discussion
 
