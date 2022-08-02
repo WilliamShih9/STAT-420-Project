@@ -1,0 +1,561 @@
+---
+title: "Seoul Bike Sharing Demand"
+author: "STAT 420, Summer 2022, Scott Downey, Sushma Ponna, William Shih"
+output:
+  bookdown::html_document2:
+    theme: readable
+    fig_caption: yes
+    toc: yes  
+urlcolor: cyan
+---
+
+***
+
+# Introduction
+
+Rental bikes and bike sharing are important in urban cities as bikes reduce traffic congestion, reduce air pollution, and improve last mile transportation. Bikes will become even more important in the future as cities urbanize and have high population densities. The goal of this project is to build a model that will accurately predict the volume of bike rentals at a given time. Predicting exactly many bikes to provide makes sure that there will be no shortage of bikes that would result in people waiting for a bike yet also not have a large surplus of bikes as that would be a waste of resources.
+
+The data set contains bike sharing data in Seoul from 12/1/2017 to 11/30/2018. Each observation represents an hour of time. The variable of interest for prediction is the rented bike count for the hour. The 12 variables that will be considered as predictors include the hour of day, temperature, humidity, wind speed, visibility, dew point, solar radiation, rainfall, snowfall, season of year, holiday (boolean), and functioning (boolean). The dataset is associated with two papers published in a journal in February and March 2020 related to gradient tree boosting, but here we'll be only using linear regression. and is found at the Seoul government website http://data.seoul.go.kr/
+
+A further description of the dataset can be found at https://archive.ics.uci.edu/ml/datasets/Seoul+Bike+Sharing+Demand
+
+# Methods
+
+We began by importing and cleaning the raw data from the dataset described above.  As part of this, we transformed several predictors into Factor and Integer variables.  We also broke out the 'Date' field into 'Day', 'Month' and 'Year'.  We eventually discarded the 'Year' predictor, as our model will be focused on predicting usage for future years (and this will enable a 'year agnostic' model to predict usage regardless of yearly data).
+
+```{r, message = FALSE, warning = FALSE, fig.height= 15, fig.width = 15}
+#Load the bike sharing data into R
+require(dplyr)
+library(tidyr)
+library(ggplot2)
+library(car)
+library(kableExtra)
+colnames = c("Date","RentedBikeCount","Hour","Temperature","Humidity","Wind","Visibility",
+             "DewPoint","SolarRadiation","Rainfall","Snowfall","Season","Holiday","Functional")
+data = read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/00560/SeoulBikeData.csv",
+                col.names = colnames)
+data = tibble(data)
+
+#Separate 'Date'  into Day, Month and Year
+data = separate(data, "Date", c("Day", "Month", "Year"))
+
+#Convert predictors to factors or integers as needed
+data$Season = as.factor(data$Season)
+data$Holiday = as.factor(data$Holiday)
+data$Functional = as.factor(data$Functional)
+
+data$Day = as.integer(data$Day)
+data$Month = as.integer(data$Month)
+data$Year = as.integer(data$Year)
+
+#Remove 'Year' as this won't be a good predictor for future years
+data = dplyr::select(data, -Year)
+
+```
+
+We investigated the data, particularly how predictors related to each other through collinearity.  Below is a correlation plot describing each.  Temperature and (to a lesser degree) Humidity both had high correlation to Dewpoint.
+
+```{r fig-1, warning = FALSE, fig.cap = "Fig-1"}
+correlations = round(cor(data %>% select(-c(Day, Month, Season, Holiday, Functional))), 2)
+cor_melt = reshape2::melt(correlations)
+ggplot(cor_melt, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  xlab("x") + ylab("y") + ggtitle("Correlation Plot") +
+  scale_fill_gradient2(low = "#075AFF",
+                       mid = "#FFFFCC",
+                       high = "#FF0000") +
+  geom_label(aes(label = value), color = "black", label.size = NA)
+```
+
+We looked at the response 'RentedBikeCount' as it relates to the various predictors we have available.  Below we compared time and date (Day, Month and Hour), as well as environment predictors like temperature, humidity, rainfall, snowfall, solar radiation, etc.
+
+```{r fig-2, warning = FALSE, fig.cap = "Fig-2"}
+draw_plot = function(data){
+  data %>%
+    gather(-RentedBikeCount, key = "xaxis", value = "value") %>%
+    ggplot(aes(x = value, y = RentedBikeCount)) + 
+    geom_point() + theme_bw() +
+    stat_smooth(geom = "smooth", size = 2, level = 0.95) +
+    facet_wrap(xaxis ~ ., scales = "free_x")
+}
+draw_plot(data %>% select(RentedBikeCount, Hour, Day, Month))
+```
+
+
+
+```{r fig-3, warning = FALSE, fig.cap = "Fig-3"}
+draw_plot(data %>% select(RentedBikeCount, Temperature, Humidity, Wind, Visibility) %>%
+  rename(`Humidity (%)` = Humidity, `Temperature (C)` = Temperature, `Wind (m/s)` = Wind, `Visibility (10 m)` = Visibility))
+```
+
+
+```{r fig-4, message = FALSE, fig.cap = "Fig-4"}
+draw_plot(data %>% select(RentedBikeCount, SolarRadiation, Rainfall, Snowfall) %>%
+  rename(`Solar radiation (MJ/m2)` = SolarRadiation, `Rainfall (mm)` = Rainfall, `Snowfall (cm)` = Snowfall))
+```
+
+
+```{r fig-5, warning = FALSE, fig.cap = "Fig-5"}
+data %>%
+  select(RentedBikeCount, Season, Holiday, Functional) %>%
+  rename(`Functional Day` = Functional) %>%
+  pivot_longer(., -RentedBikeCount, names_to = "Variable", values_to = "Value") %>%
+  ggplot(aes(x = Value, y = RentedBikeCount)) + theme_bw() + 
+    geom_boxplot() + 
+    facet_wrap(. ~ Variable, scales = "free_x")
+```
+
+
+
+```{r, warning = FALSE}
+get_loocv_rmse = function(model) {
+  sqrt(mean((resid(model) / (1 - hatvalues(model))) ^ 2))
+}
+get_rmse = function(model, power = 1){
+  pred = predict(model, bike_tst)^power
+  actual = bike_tst$RentedBikeCount
+  n = length(pred)
+  sqrt(1/n * sum((actual-pred)^2))
+}
+get_R2 = function(model){
+  cor(predict(model, bike_tst), bike_tst$RentedBikeCount)^2
+}
+get_R2_adj = function(model, power){
+  factor = summary(model)$adj.r.squared/summary(model)$r.squared
+  cor(predict(model, bike_trn)^power, bike_trn$RentedBikeCount)^2
+}
+evaluate = function(models, row_names){
+  num_coefs = sapply(models, function(x) length(coef(x)))
+  loocv_rmse = sapply(models, get_loocv_rmse)
+  bics_list = unlist(sapply(models, AIC, k = log(6132)))
+  rmse_list = sapply(models, get_rmse)
+  R2test_list = sapply(models, get_R2)
+  R2adj_list = sapply(models, function(x) summary(x)$adj.r.squared)
+  frame = cbind(num_coefs, loocv_rmse, bics_list, rmse_list, R2adj_list, R2test_list)
+  colnames(frame) = c("Coefficients", "LOOCV-RMSE","BIC","Test RMSE","Adjusted R2","Test R2")
+  rownames(frame) = row_names
+  return(frame)
+}
+evaluate_power = function(models, power = 0.5, row_names){
+  num_coefs = sapply(models, function(x) length(coef(x)))
+  loocv_rmse = sapply(models, get_loocv_rmse)
+  bics_list = unlist(sapply(models, AIC, k = log(6132)))
+  rmse_list = sapply(models, get_rmse, power = 1/power)
+  R2test_list = sapply(models, function(model) cor(predict(model, bike_tst)^(1/power), bike_tst$RentedBikeCount))^2
+  R2adj_list = sapply(models, get_R2_adj, power = 1/power)
+  frame = cbind(num_coefs, loocv_rmse, bics_list, rmse_list, R2adj_list, R2test_list)
+  colnames(frame) = c("Coefficients", "LOOCV-RMSE","BIC","Test RMSE","Adjusted R2","Test R2")
+  rownames(frame) = row_names
+  return(frame)
+}
+get_table = function(frame, title){
+  # Minimum for 2,3,4 
+  # Maximum for 5,6
+  kable(frame, digits = c(0,1,1,1,3,3), caption = title, format.args = list(big.mark = ",")) %>%
+    column_spec(3, bold = (frame[,2] == min(frame[,2]))) %>%
+    column_spec(4, bold = (frame[,3] == min(frame[,3]))) %>%
+    column_spec(5, bold = (frame[,4] == min(frame[,4]))) %>%
+    column_spec(6, bold = (frame[,5] == max(frame[,5]))) %>%
+    column_spec(7, bold = (frame[,6] == max(frame[,6]))) %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "bordered", "condensed", "responsive"))
+}
+plot_diagnostics = function(model, title){
+  require(ggplot2)
+  require(grid)
+  require(gridExtra)
+    pcol = "grey"
+    lcol = "dodgerblue"
+    data1 = data.frame(Fitted = fitted(model), Residuals = resid(model))
+    plot1 = ggplot(data1, aes(x = Fitted, y = Residuals)) +
+      geom_point(color = pcol) + theme_bw() + geom_hline(yintercept = 0, color = lcol) + 
+      stat_smooth() +
+      ggtitle(paste("Fitted vs Residuals for\n",title))
+    plot2 = ggplot(data1, aes(sample = Residuals)) + 
+      stat_qq(color = pcol) + stat_qq_line(color = lcol) + theme_bw() +
+      xlab("Theoretical Quantiles") + ylab("Sample Quantiles") +
+      ggtitle(paste("Normal Q-Q Plot for\n",title))
+    arrangeGrob(plot1, plot2, nrow = 1, ncol = 2)
+}
+
+transformation_power = function(pow, form){
+  temp_data = bike_trn
+  temp_data$RentedBikeCount = temp_data$RentedBikeCount^pow
+  model = lm(form, data = temp_data)
+  R2_factor = summary(model)$adj.r.squared/summary(model)$r.squared
+  actual_test = bike_tst$RentedBikeCount
+  pred_test = (pmax(predict(model, bike_tst), 0))^(1/pow) 
+  pred_train = (pmax(predict(model, bike_trn), 0))^(1/pow) 
+  n = length(pred_test)
+  c(Adj_R2 = cor(pred_train, bike_trn$RentedBikeCount)^2*R2_factor, 
+         Test_RMSE = sqrt(1/n * sum((actual_test-pred_test)^2)))
+}
+```
+
+We then split our data into 'Train' and 'Test' data sets.  We used a 70/30 split Train/Test, where we would build our model on the 'Train' data and test its performance on the 'Test' dataset.
+
+```{r, message = FALSE, warning = FALSE, fig.height= 15, fig.width = 15}
+#Split data into training and test data
+set.seed(42)
+trn_size = as.integer(0.7 * count(data))
+trn_idx = sample(nrow(data), trn_size)
+bike_trn = data[trn_idx, ]
+bike_tst = data[-trn_idx, ]
+```
+
+We began with several initial models - an multiple linear regressions (MLR) additive model and several interaction models, ending will a "full" interaction model with all two-way interaction between the predictors.  We decided to use three metrics to test the validity of variable subset selection: LOOCV-RMSE, BIC and Test RMSE.
+
+```{r, message = FALSE, warning = FALSE, fig.height= 15, fig.width = 15}
+#Initial model starting points
+model_add = lm(RentedBikeCount ~ ., data = bike_trn)
+model_fact = lm(RentedBikeCount ~ . + factor(Hour), data = bike_trn)
+model_fact2 = lm(RentedBikeCount ~ . + factor(Hour) + (Temperature * .), data = bike_trn)
+model_fact3 = lm(RentedBikeCount ~ . + factor(Hour) + (Temperature * .) + (Hour*.), data = bike_trn)
+model_fact4 = lm(RentedBikeCount ~ . + factor(Hour) + (Temperature * .) + (Humidity*.) + (Hour*.), data = bike_trn)
+model_fact5 = lm(RentedBikeCount ~ (.)^2 + factor(Hour), data = bike_trn)
+continuous = c("Day","Hour","Temperature","Humidity","Wind","Visibility","DewPoint","SolarRadiation","Rainfall","Snowfall")
+full_formula = as.formula(
+    paste0('RentedBikeCount ~ (.)^2 + factor(Hour) + ', paste0('I(',continuous,'^2)*.',collapse = ' + ')))
+model_fact6 = lm(RentedBikeCount ~ (.)^2 + factor(Hour) + I(Temperature^2)*. + I(Wind^2)*., data = bike_trn)
+model_fact7 = lm(RentedBikeCount ~ (.)^2 + factor(Hour) + I(Temperature^2)*. + I(Wind^2)*. + I(Hour^2)*., data = bike_trn)
+model_full = lm(full_formula, data = bike_trn)
+models = list(model_add, model_fact, model_fact2, model_fact3, model_fact4, model_fact5, model_fact6, model_fact7, model_full)
+```
+
+```{r, warning = FALSE}
+frame = evaluate(models, row_names = c("Additive","Hour as Factor","Interaction with Temp",
+                    "Interaction with Temp,Hour","Interaction with Temp,Humidity,Hour",
+                    "All Interaction", "All Interaction (Quadratic for Wind/Temp)", "All Interaction (Quadratic for Wind/Temp/Hour", "All Interaction with Quadratics"))
+table_eval1 = get_table(frame, title = "Evaluation of Initial Models")
+```
+
+Once we selected the initial model we liked best based on the metrics above, we ran this through AIC and BIC procedures in an attempt to simplify the model without sacrificing accuracy to a material degree.
+
+```{r, message = FALSE, warning = FALSE, fig.height= 15, fig.width = 15}
+#aic_model = step(model_fact7, direction = "backward", trace = 0)
+#bic_model = step(model_fact7, span = RentedBikeCount ~ 1, direction = "backward", k = log(trn_size), trace = 0)
+#aic_formula = aic_model$terms
+#bic_formula = bic_model$terms
+#anova(bic_model, bic_model2)
+
+aic_formula = formula(RentedBikeCount ~ Day + Month + Hour + Temperature + Humidity + 
+     Wind + Visibility + DewPoint + SolarRadiation + Rainfall + 
+     Snowfall + Season + Holiday + Functional + factor(Hour) + 
+     I(Temperature^2) + I(Wind^2) + Day:Month + Day:Humidity + 
+     Day:Wind + Day:Visibility + Day:SolarRadiation + Day:Season + 
+     Day:Holiday + Month:Temperature + Month:Visibility + Month:DewPoint + 
+     Month:SolarRadiation + Month:Season + Month:Holiday + Month:Functional + 
+     Hour:Temperature + Hour:Humidity + Hour:Wind + Hour:Visibility + 
+     Hour:DewPoint + Hour:SolarRadiation + Hour:Rainfall + Hour:Snowfall + 
+     Hour:Season + Hour:Holiday + Hour:Functional + Temperature:Wind + 
+     Temperature:Visibility + Temperature:DewPoint + Temperature:SolarRadiation + 
+     Temperature:Rainfall + Temperature:Season + Humidity:Wind + 
+     Humidity:Visibility + Humidity:DewPoint + Humidity:SolarRadiation + 
+     Humidity:Rainfall + Humidity:Season + Humidity:Holiday + 
+     Humidity:Functional + Wind:Visibility + Wind:DewPoint + Wind:SolarRadiation + 
+     Wind:Season + Visibility:DewPoint + Visibility:SolarRadiation + 
+     DewPoint:SolarRadiation + DewPoint:Rainfall + DewPoint:Season + 
+     DewPoint:Functional + SolarRadiation:Season + SolarRadiation:Functional + 
+     Rainfall:Snowfall + Rainfall:Season + Season:Holiday + Season:Functional + 
+     Holiday:Functional + Day:I(Temperature^2) + Month:I(Temperature^2) + 
+     Wind:I(Temperature^2) + DewPoint:I(Temperature^2) + Rainfall:I(Temperature^2) + 
+     Season:I(Temperature^2) + Holiday:I(Temperature^2) + Hour:I(Wind^2) + 
+     Temperature:I(Wind^2) + Humidity:I(Wind^2) + Wind:I(Wind^2) + 
+     Visibility:I(Wind^2) + DewPoint:I(Wind^2) + Rainfall:I(Wind^2) + 
+     Snowfall:I(Wind^2) + Season:I(Wind^2))
+bic_formula = formula(RentedBikeCount ~ Day + Month + Hour + Temperature + Humidity + 
+     Wind + Visibility + DewPoint + SolarRadiation + Rainfall + 
+     Snowfall + Season + Holiday + Functional + factor(Hour) + 
+     I(Temperature^2) + I(Wind^2) + Day:Holiday + Month:Temperature + 
+     Month:DewPoint + Month:Season + Month:Holiday + Hour:Temperature + 
+     Hour:Humidity + Hour:Wind + Hour:DewPoint + Hour:SolarRadiation + 
+     Hour:Rainfall + Hour:Holiday + Hour:Functional + Temperature:Visibility + 
+     Temperature:DewPoint + Temperature:Rainfall + Temperature:Season + 
+     Humidity:Visibility + Humidity:DewPoint + Humidity:SolarRadiation + 
+     Humidity:Season + Humidity:Functional + Wind:SolarRadiation + 
+     Wind:Rainfall + Wind:Season + Visibility:DewPoint + DewPoint:SolarRadiation + 
+     DewPoint:Rainfall + DewPoint:Season + DewPoint:Functional + 
+     SolarRadiation:Functional + Rainfall:Snowfall + Season:Holiday + 
+     Day:I(Temperature^2) + Month:I(Temperature^2) + DewPoint:I(Temperature^2) + 
+     Rainfall:I(Temperature^2) + Season:I(Temperature^2) + Holiday:I(Temperature^2) + 
+     Hour:I(Wind^2) + Season:I(Wind^2))
+aic_model = lm(aic_formula, data = bike_trn)
+bic_model = lm(bic_formula, data = bike_trn)
+```
+
+```{r, message = FALSE}
+plot_diag1 = plot_diagnostics(bic_model, "BIC Model with no Transform")
+```
+
+Try transformations of response variable to fix diagnostics
+
+```{r, warning = FALSE}
+bike_shift = bike_trn
+bike_shift$RentedBikeCount = bike_shift$RentedBikeCount + 1
+bic_one = lm(bic_formula, data = bike_shift)
+bc = MASS::boxcox(bic_one, lambda = seq(-0.8, 1.2, 0.02), plotit = FALSE)
+best_lambda = bc$x[which.max(bc$y)]
+plot_boxcox = ggplot(data.frame(lambda = bc$x, like = bc$y), aes(x = lambda, y = like)) +
+  geom_line(size = 2) + xlab("Lambda") + ylab("Log-Likelihood") +
+  geom_vline(aes(xintercept = best_lambda, color = "Max"), size = 2) + theme_bw() +
+  geom_vline(aes(xintercept = 0.5, color = "Square Root"), size = 2) +
+  geom_vline(aes(xintercept = 1, color = "Linear"), size = 2) +
+  ggtitle("BoxCox Plot")
+```
+
+```{r, warning = FALSE}
+try_powers = seq(0.2,1,0.1)
+power_RMSE = t(sapply(seq(0.2,1,0.1), transformation_power, form = bic_formula))
+colnames(power_RMSE) = c("Adjusted R^2","Test RMSE")
+rownames(power_RMSE) = try_powers
+table_transform = kable(power_RMSE, digits = c(3,1), caption = "Adjusted R^2 and Test RMSE using power transformations of response variable of BIC model (Predictions Clamped at 0)") %>%
+  column_spec(2, bold = power_RMSE[,1] == max(power_RMSE[,1])) %>% column_spec(3, bold = power_RMSE[,2] == min(power_RMSE[,2])) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "bordered", "condensed", "responsive"))
+```
+
+
+
+```{r, warning = FALSE}
+bic_sqrt = lm(update(bic_formula, sqrt(.) ~ . ), data = bike_trn)
+```
+
+```{r, warning = FALSE, message = FALSE}
+bic_sqrt_full = lm(sqrt(RentedBikeCount) ~ (.)^2 + factor(Hour) + I(Day^2) * . + 
+    I(Hour^2) * . + I(Temperature^2) * . + I(Humidity^2) * . + 
+    I(Wind^2) * . + I(Visibility^2) * . + I(DewPoint^2) * . + 
+    I(SolarRadiation^2) * . + I(Rainfall^2) * . + I(Snowfall^2) * ., data = bike_trn)
+best_formula = formula(sqrt(RentedBikeCount) ~ .-Day + factor(Hour) + 
+      I(Temperature^2) + I(Humidity^2) + I(Wind^2) + 
+      I(Visibility^2) + I(DewPoint^2) + I(SolarRadiation^2) + I(Rainfall^2) + 
+      I(Snowfall^2) + Month:(Season + Holiday) +
+      Hour:(Temperature + Humidity + Visibility + SolarRadiation + Rainfall + Season + Holiday + Functional) + 
+      Temperature:(Humidity + DewPoint + SolarRadiation + Rainfall + Season + Holiday + Functional) + 
+      Humidity:(Visibility + DewPoint + Rainfall + Holiday + Functional) + 
+      Wind:(Visibility + DewPoint) + Visibility:Rainfall + 
+      DewPoint:(Rainfall + Season + Functional) + 
+      SolarRadiation:Holiday + Rainfall:Functional + Season:Holiday +
+			I(Hour^2):(Temperature + Season) + I(Hour^3):Temperature + 
+      I(Temperature^2):(Temperature + Humidity + DewPoint + Rainfall + Season) + 
+      I(Humidity^2):(Hour + Temperature + Humidity + Wind + Functional) + 
+      I(Wind^2):(Humidity + Visibility + DewPoint) +
+      I(Visibility^2):(Hour + Temperature + Humidity + Visibility + DewPoint + Rainfall) +
+      I(DewPoint^2):(Humidity + DewPoint + SolarRadiation + Rainfall) +
+      I(SolarRadiation^2):(SolarRadiation + Rainfall + Holiday) +
+      I(Rainfall^2):(Temperature + Humidity + DewPoint + SolarRadiation + Rainfall + Functional) +
+      I(Snowfall^2):(Wind + Visibility + Snowfall))
+best_model = lm(best_formula, data = bike_trn)
+
+sqrt_models = list(bic_sqrt, best_model, bic_sqrt_full)
+frame2_sqrt = evaluate_power(sqrt_models, power = 0.5, c("BIC Sqrt","BIC Sqrt Optimal", "BIC Sqrt Full"))
+
+models = list(model_fact7, aic_model, bic_model)
+frame2 = evaluate(models, row_names = c("All Interaction", "AIC Model", "BIC Model"))
+frame3 = rbind(frame2, frame2_sqrt)
+rownames(frame3) = c("All Interaction (Linear)", "AIC Model (Linear)", "BIC Model (Linear)","BIC Model (Sqrt Transform)", "Selected Model (Sqrt Transform)", "Full Model (Sqrt Transform)") 
+table_eval2 = get_table(frame3, title = "Evaluation of Models (LOOCV-RMSE/BIC of Transformed vs Non-Transformed Not Comparable)")
+plot_diag2 = plot_diagnostics(best_model, "BIC Model with Transform")
+```
+
+
+```{r, warning = FALSE, message = FALSE}
+library(DAAG)
+library(Metrics)
+kfold = 10
+cv_evaluate = list(model_add, bic_model, bic_sqrt, best_model)
+cv_bic = lapply(cv_evaluate,function(model){
+  temp = cv.lm(data.frame(bike_trn), model, m = kfold, 
+               seed = 40, printit = FALSE, plotit = FALSE)
+  if (length(temp) == 19){
+    dat = cbind(temp[3], temp[17]^2, temp[18]^2, temp[19])
+  }
+  else if (length(temp) == 18){
+    dat = cbind(temp[3],temp[16], temp[17], temp[18])
+  }
+  names(dat) = c("actual","predicted","cvpred","fold")
+  dat
+})
+
+res = lapply(cv_bic, function(x){
+  x %>%
+    group_by(fold) %>%
+    summarize(MAE = mean(abs(actual - cvpred)),
+              MSE = sqrt(mean((actual - cvpred)^2)),
+              MAE_CV = mean(abs(predicted-cvpred)))
+})
+res = purrr::reduce(res, full_join)
+res["model"] = c(rep("Additive (No Transform)", kfold), 
+                 rep("BIC Model (No Transform)", kfold),
+                 rep("BIC Model (Sqrt Transform)", kfold),
+                 rep("Selected Model (Sqrt Transform)", kfold))
+plot_CV = ggplot(res, aes(x = MAE, y = MSE,  color = model)) +
+  geom_point(size = 2) + theme_bw() + xlab("Mean Absolute Error") +
+  ylab("Root Mean Squared Error") + xlim(100, 350) + ylim(200, 500) +
+  ggtitle("MAE and RMSE of 10-fold Cross-Validation of Select Models")
+plot_CV2 = ggplot(res, aes(x = MAE_CV, y = MSE,  color = model)) +
+  geom_point(size = 3) + theme_bw() + xlab("Average Difference Between CV Prediction and All Data Prediction") +
+  ylab("Root Mean Squared Error") +
+  ggtitle("Measuring Variance of Models with 10-fold Cross-Validation")
+```
+
+
+```{r, warning = FALSE}
+Predicted = predict(best_model, data)^2
+Actual = data$RentedBikeCount
+plot_timeline1 = ggplot(data.frame(Point = 1:50, Predicted = Predicted[1:50], Actual = Actual[1:50]), aes(x = Point)) +
+  theme_bw() + ylab("Number of Rented Bikes") + xlab("Hour") +
+  geom_line(aes(y = Predicted, color = "Predicted"), size = 1) +
+  geom_line(aes(y = Actual, color = "Actual"), size = 1) + ggtitle("Predicted vs Actual of Hours 1-50")
+plot_timeline2 = ggplot(data.frame(Point = 1:50, Predicted = Predicted[1001:1050], Actual = Actual[1001:1050]), aes(x = Point)) +
+  theme_bw() + ylab("Number of Rented Bikes") + xlab("Hour") +
+  geom_line(aes(y = Predicted, color = "Predicted"), size = 1) +
+  geom_line(aes(y = Actual, color = "Actual"), size = 1) + ggtitle("Predicted vs Actual of Hours 1001-1050")
+```
+
+
+```{r, warning = FALSE, message = FALSE}
+data$Predicted_BikeCount =  predict(best_model, data)^2
+data$Error = data$RentedBikeCount - data$Predicted_BikeCount
+plot_error = ggplot(data[-trn_idx, ], aes(x = RentedBikeCount, y = Error)) +
+  geom_point(alpha = 0.3) + 
+  stat_smooth(method = "loess", formula = "y~x", se = FALSE) + 
+  theme_bw() + ggtitle("Actual Bike Count vs Error (Actual - Predicted)")
+plot_actual = ggplot(data[-trn_idx, ], aes(x = Predicted_BikeCount, y = RentedBikeCount)) +
+  geom_point(alpha = 0.3) + coord_fixed() +
+  stat_smooth(method = "loess", formula = "y~x", se = FALSE) + 
+  theme_bw() + ggtitle("Predicted vs Actual Bike Count")
+```
+
+```{r, message = FALSE}
+hour_holidayerror = data %>%
+  group_by(Hour, Holiday) %>%
+  summarize(Predicted = mean(Predicted_BikeCount),
+            Actual = mean(RentedBikeCount),
+            Error = Metrics::bias(RentedBikeCount, Predicted_BikeCount))
+plot_hour_holidayerror = ggplot(hour_holidayerror, aes(x = Hour, group = Holiday, linetype = Holiday)) + 
+  theme_bw() +
+  geom_line(aes(y = Predicted, color = "Predicted"), size = 1) +
+  geom_line(aes(y = Actual, color = "Actual"), size = 1) +
+  ggtitle("Mean Actual vs Predicted (Bias) by Hour of Day and Holiday or No Holiday")
+```
+
+
+```{r}
+```
+
+```{r, message = FALSE}
+hour_seasonerror = data %>%
+  group_by(Hour, Season) %>%
+  summarize(Predicted = mean(Predicted_BikeCount),
+            Actual = mean(RentedBikeCount),
+             Error = Metrics::bias(RentedBikeCount, Predicted_BikeCount))
+plot_hour_seasonerror = ggplot(hour_seasonerror, aes(x = Hour, group = Season)) + theme_bw() +
+  geom_point(aes(y = Predicted, color = Season, shape = "Predicted"), size = 2) +
+  geom_line(aes(y = Predicted, color = Season, linetype = "Predicted"), size = 1) +
+  geom_point(aes(y = Actual, color = Season, shape = "Actual"), size = 2) +
+  geom_line(aes(y = Actual, color = Season, linetype = "Actual"), size = 1) +
+  ggtitle("Mean Actual vs Predicted (Bias) by Hour of Day and Season")
+
+```
+
+```{r}
+hourerror = data %>%
+  group_by(Hour) %>%
+  summarize(Error = 100 * Metrics::smape(RentedBikeCount, Predicted_BikeCount))
+plot_hourerror = ggplot(hourerror, aes(x = Hour, y = Error)) + 
+  theme_bw() + geom_bar(stat = 'identity', position = 'dodge') +
+  ylab("Symmetric mean absolute percentage error") + 
+  ggtitle("Symmetric mean absolute percentage error by hour of day")
+```
+
+```{r}
+montherror = data %>%
+  group_by(Month) %>%
+  summarize(Error = 100 * Metrics::smape(RentedBikeCount, Predicted_BikeCount))
+plot_montherror = ggplot(montherror, aes(x = Month, y = Error)) + 
+  theme_bw() + geom_bar(stat = 'identity', position = 'dodge') +
+  ylab("Symmetric mean absolute percentage error") + 
+  ggtitle("Symmetric mean absolute percentage error by Month")
+```
+
+
+# Results
+
+
+```{r tab1}
+table_eval1
+```
+
+```{r fig1, fig.cap = "Plot 1"}
+grid.draw(plot_diag1)
+```
+
+```{r tab2}
+table_transform
+```
+
+```{r fig2, fig.cap = "Plot 2"}
+plot_boxcox
+```
+
+
+```{r fig3, fig.cap = "Plot 3"}
+grid.draw(plot_diag2)
+```
+
+
+```{r tab3}
+table_eval2
+```
+
+```{r fig4, fig.cap = "Plot 4"}
+plot_CV
+```
+
+
+```{r fig5, fig.cap = "Plot 5"}
+plot_CV2
+```
+
+```{r fig6, fig.cap = "Plot 6"}
+plot_error
+```
+
+```{r fig7, fig.cap = "Plot 7"}
+plot_actual
+```
+
+
+```{r fig8, fig.cap = "Plot 8"}
+plot_timeline1
+```
+
+```{r fig9, fig.cap = "Plot 9"}
+plot_timeline2
+```
+
+```{r fig10, fig.cap = "Plot 10"}
+plot_hour_holidayerror
+```
+
+
+```{r fig11, fig.cap = "Plot 11"}
+plot_hour_seasonerror 
+```
+
+
+```{r fig12, fig.cap = "Plot 12"}
+plot_hourerror
+```
+
+
+```{r fig13, fig.cap = "Plot 13"}
+plot_montherror
+```
+
+# Discussion
+
+In Figure \@ref(fig:fig1) we see plot 1. In Figure \@ref(fig:fig2) we see plot 2.
+
+
+# Appendix
+
