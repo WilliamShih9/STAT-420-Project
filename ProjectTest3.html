@@ -700,6 +700,7 @@ Figure 2.4: Fig-4
 Figure 2.5: Fig-5
 </p>
 </div>
+<p>The <code>evaluate</code> function below is for generating the data for Table 3.1 and the top half of Table 3.3. The <code>evaluate_power</code> function is for generating the the data for bottom half of Table 3.3. The <code>get_table</code> formats two tables. The <code>transformation_power</code> function is for generating the data for Table 3.2.</p>
 <pre class="r"><code>get_loocv_rmse = function(model) {
   sqrt(mean((resid(model) / (1 - hatvalues(model))) ^ 2))
 }
@@ -800,21 +801,22 @@ continuous = c(&quot;Day&quot;,&quot;Hour&quot;,&quot;Temperature&quot;,&quot;Hu
 full_formula = as.formula(
     paste0(&#39;RentedBikeCount ~ (.)^2 + factor(Hour) + &#39;, paste0(&#39;I(&#39;,continuous,&#39;^2)*.&#39;,collapse = &#39; + &#39;)))
 model_fact6 = lm(RentedBikeCount ~ (.)^2 + factor(Hour) + I(Temperature^2)*. + I(Wind^2)*., data = bike_trn)
-model_fact7 = lm(RentedBikeCount ~ (.)^2 + factor(Hour) + I(Temperature^2)*. + I(Wind^2)*. + I(Hour^2)*., data = bike_trn)
 model_full = lm(full_formula, data = bike_trn)
-models = list(model_add, model_fact, model_fact2, model_fact3, model_fact4, model_fact5, model_fact6, model_fact7, model_full)</code></pre>
+models = list(model_add, model_fact, model_fact2, model_fact3, model_fact4, model_fact5, model_fact6, model_full)</code></pre>
 <pre class="r"><code>frame = evaluate(models, row_names = c(&quot;Additive&quot;,&quot;Hour as Factor&quot;,&quot;Interaction with Temp&quot;,
                     &quot;Interaction with Temp,Hour&quot;,&quot;Interaction with Temp,Humidity,Hour&quot;,
-                    &quot;All Interaction&quot;, &quot;All Interaction (Quadratic for Wind/Temp)&quot;, &quot;All Interaction (Quadratic for Wind/Temp/Hour&quot;, &quot;All Interaction with Quadratics&quot;))
+                    &quot;All Interaction&quot;, &quot;All Interaction (Quadratic for Wind/Temp)&quot;, &quot;All Interaction with Quadratics&quot;))
 table_eval1 = get_table(frame, title = &quot;Evaluation of Initial Models&quot;)</code></pre>
 <p>Once we selected the initial model we liked best based on the metrics above, we ran this through AIC and BIC procedures in an attempt to simplify the model without sacrificing accuracy to a material degree.</p>
-<pre class="r"><code>#aic_model = step(model_fact7, direction = &quot;backward&quot;, trace = 0)
-#bic_model = step(model_fact7, span = RentedBikeCount ~ 1, direction = &quot;backward&quot;, k = log(trn_size), trace = 0)
-#aic_formula = aic_model$terms
-#bic_formula = bic_model$terms
-#anova(bic_model, bic_model2)
-
-aic_formula = formula(RentedBikeCount ~ Day + Month + Hour + Temperature + Humidity + 
+<pre class="r"><code>&#39;
+aic_model = step(model_fact7, direction = &quot;backward&quot;, trace = 0)
+bic_model = step(model_fact7, span = RentedBikeCount ~ 1, direction = &quot;backward&quot;, k = log(trn_size), trace = 0)
+aic_formula = aic_model$terms
+bic_formula = bic_model$terms
+anova(bic_model, bic_model2)
+&#39;</code></pre>
+<pre><code>## [1] &quot;\naic_model = step(model_fact7, direction = \&quot;backward\&quot;, trace = 0)\nbic_model = step(model_fact7, span = RentedBikeCount ~ 1, direction = \&quot;backward\&quot;, k = log(trn_size), trace = 0)\naic_formula = aic_model$terms\nbic_formula = bic_model$terms\nanova(bic_model, bic_model2)\n&quot;</code></pre>
+<pre class="r"><code>aic_formula = formula(RentedBikeCount ~ Day + Month + Hour + Temperature + Humidity + 
      Wind + Visibility + DewPoint + SolarRadiation + Rainfall + 
      Snowfall + Season + Holiday + Functional + factor(Hour) + 
      I(Temperature^2) + I(Wind^2) + Day:Month + Day:Humidity + 
@@ -854,12 +856,12 @@ bic_formula = formula(RentedBikeCount ~ Day + Month + Hour + Temperature + Humid
      SolarRadiation:Functional + Rainfall:Snowfall + Season:Holiday + 
      Day:I(Temperature^2) + Month:I(Temperature^2) + DewPoint:I(Temperature^2) + 
      Rainfall:I(Temperature^2) + Season:I(Temperature^2) + Holiday:I(Temperature^2) + 
-     Hour:I(Wind^2) + Season:I(Wind^2))
+    Hour:I(Wind^2) + Season:I(Wind^2))
 aic_model = lm(aic_formula, data = bike_trn)
 bic_model = lm(bic_formula, data = bike_trn)</code></pre>
+<p>The BIC model was only slightly worse than the AIC model while lowering the number of parameters from 140 to 99 so the model selected from backward stepwise regression using BIC was the initial choice of model.</p>
 <pre class="r"><code>plot_diag1 = plot_diagnostics(bic_model, &quot;BIC Model with no Transform&quot;)</code></pre>
-<pre><code>## Warning: package &#39;gridExtra&#39; was built under R version 4.2.1</code></pre>
-<p>Try transformations of response variable to fix diagnostics</p>
+<p>The residuals of the BIC model do not show constant variance and shows a typical situation (as the response variable is bounded by 0 and no upper bound) where the variance is higher when the predicted value is higher so try a transformation of the response variable where the power is below 1. Note a log transformation is inappropriate due to the presence of many 0 values.</p>
 <pre class="r"><code>bike_shift = bike_trn
 bike_shift$RentedBikeCount = bike_shift$RentedBikeCount + 1
 bic_one = lm(bic_formula, data = bike_shift)
@@ -871,6 +873,7 @@ plot_boxcox = ggplot(data.frame(lambda = bc$x, like = bc$y), aes(x = lambda, y =
   geom_vline(aes(xintercept = 0.5, color = &quot;Square Root&quot;), size = 2) +
   geom_vline(aes(xintercept = 1, color = &quot;Linear&quot;), size = 2) +
   ggtitle(&quot;BoxCox Plot&quot;)</code></pre>
+<p>Below, we compute the adjusted <span class="math inline">\(R^{2}\)</span> and Test RMSE when transforming the response variable (testing powers of 0.2-1.0 in increments of 0.1 on the response variable). Note the adjusted <span class="math inline">\(R^{2}\)</span> was calculated using the <span class="math inline">\(R^{2}\)</span> of the back transformed predicted values and then multiplied by a factor <code>summary(model)$adj.r.squared/summary(model)$r.squared</code>. Table 3.3 shows that a square root transformation actually improves the test RMSE and adjusted <span class="math inline">\(R^{2}\)</span> while giving the residuals closer to constant variance.</p>
 <pre class="r"><code>try_powers = seq(0.2,1,0.1)
 power_RMSE = t(sapply(seq(0.2,1,0.1), transformation_power, form = bic_formula))
 colnames(power_RMSE) = c(&quot;Adjusted R^2&quot;,&quot;Test RMSE&quot;)
@@ -879,6 +882,8 @@ table_transform = kable(power_RMSE, digits = c(3,1), caption = &quot;Adjusted R^
   column_spec(2, bold = power_RMSE[,1] == max(power_RMSE[,1])) %&gt;% column_spec(3, bold = power_RMSE[,2] == min(power_RMSE[,2])) %&gt;%
   kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;bordered&quot;, &quot;condensed&quot;, &quot;responsive&quot;))</code></pre>
 <pre class="r"><code>bic_sqrt = lm(update(bic_formula, sqrt(.) ~ . ), data = bike_trn)</code></pre>
+<p>The <code>bic_sqrt</code> model has the same exact parameters as the model selected from backward step wise regression using BIC (full model was <code>model_fact6</code>).
+The best model <code>best_model</code> below was found manually after removing some parameters that not logical to be there from the <code>bic_sqrt_full</code> model and is between the <code>bic_sqrt</code> and <code>bic_sqrt_full</code> model in complexity and number of parameters.</p>
 <pre class="r"><code>bic_sqrt_full = lm(sqrt(RentedBikeCount) ~ (.)^2 + factor(Hour) + I(Day^2) * . + 
     I(Hour^2) * . + I(Temperature^2) * . + I(Humidity^2) * . + 
     I(Wind^2) * . + I(Visibility^2) * . + I(DewPoint^2) * . + 
@@ -907,12 +912,13 @@ best_model = lm(best_formula, data = bike_trn)
 sqrt_models = list(bic_sqrt, best_model, bic_sqrt_full)
 frame2_sqrt = evaluate_power(sqrt_models, power = 0.5, c(&quot;BIC Sqrt&quot;,&quot;BIC Sqrt Optimal&quot;, &quot;BIC Sqrt Full&quot;))
 
-models = list(model_fact7, aic_model, bic_model)
+models = list(model_fact6, aic_model, bic_model)
 frame2 = evaluate(models, row_names = c(&quot;All Interaction&quot;, &quot;AIC Model&quot;, &quot;BIC Model&quot;))
 frame3 = rbind(frame2, frame2_sqrt)
 rownames(frame3) = c(&quot;All Interaction (Linear)&quot;, &quot;AIC Model (Linear)&quot;, &quot;BIC Model (Linear)&quot;,&quot;BIC Model (Sqrt Transform)&quot;, &quot;Selected Model (Sqrt Transform)&quot;, &quot;Full Model (Sqrt Transform)&quot;) 
 table_eval2 = get_table(frame3, title = &quot;Evaluation of Models (LOOCV-RMSE/BIC of Transformed vs Non-Transformed Not Comparable)&quot;)
 plot_diag2 = plot_diagnostics(best_model, &quot;BIC Model with Transform&quot;)</code></pre>
+<p>We try 10-fold cross-validation to measure how much better the selected model is compared to the model chosen by BIC and the naive additive model.</p>
 <pre class="r"><code>library(DAAG)
 library(Metrics)
 kfold = 10
@@ -950,6 +956,7 @@ plot_CV2 = ggplot(res, aes(x = MAE_CV, y = MSE,  color = model)) +
   geom_point(size = 3) + theme_bw() + xlab(&quot;Average Difference Between CV Prediction and All Data Prediction&quot;) +
   ylab(&quot;Root Mean Squared Error&quot;) +
   ggtitle(&quot;Measuring Variance of Models with 10-fold Cross-Validation&quot;)</code></pre>
+<p>The Cross-Validation plot on Figure <a href="#fig:fig4">3.4</a> generally shows the selected model (manually) performs better than the BIC model with lower RMSE and MAE. The Figure <a href="#fig:fig5">3.5</a> shows however more variance in the selected model than the BIC model and one of the 10 folds often has high RMSE.</p>
 <pre class="r"><code>Predicted = predict(best_model, data)^2
 Actual = data$RentedBikeCount
 plot_timeline1 = ggplot(data.frame(Point = 1:50, Predicted = Predicted[1:50], Actual = Actual[1:50]), aes(x = Point)) +
@@ -1183,43 +1190,20 @@ All Interaction (Quadratic for Wind/Temp)
 <td style="text-align:right;">
 191
 </td>
-<td style="text-align:right;">
+<td style="text-align:right;font-weight: bold;">
 276.4
 </td>
-<td style="text-align:right;">
+<td style="text-align:right;font-weight: bold;">
 87,338.9
 </td>
-<td style="text-align:right;">
+<td style="text-align:right;font-weight: bold;">
 268.6
 </td>
 <td style="text-align:right;">
 0.833
 </td>
-<td style="text-align:right;">
+<td style="text-align:right;font-weight: bold;">
 0.817
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-All Interaction (Quadratic for Wind/Temp/Hour
-</td>
-<td style="text-align:right;">
-208
-</td>
-<td style="text-align:right;font-weight: bold;">
-270.8
-</td>
-<td style="text-align:right;font-weight: bold;">
-87,190.4
-</td>
-<td style="text-align:right;font-weight: bold;">
-264.6
-</td>
-<td style="text-align:right;">
-0.840
-</td>
-<td style="text-align:right;font-weight: bold;">
-0.823
 </td>
 </tr>
 <tr>
@@ -1422,22 +1406,22 @@ Test R2
 All Interaction (Linear)
 </td>
 <td style="text-align:right;">
-208
+191
 </td>
 <td style="text-align:right;">
-270.8
+276.4
 </td>
 <td style="text-align:right;">
-87,190.4
+87,338.9
 </td>
 <td style="text-align:right;">
-264.6
+268.6
 </td>
 <td style="text-align:right;">
-0.840
+0.833
 </td>
 <td style="text-align:right;">
-0.823
+0.817
 </td>
 </tr>
 <tr>

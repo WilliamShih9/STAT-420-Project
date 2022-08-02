@@ -106,7 +106,7 @@ data %>%
     facet_wrap(. ~ Variable, scales = "free_x")
 ```
 
-
+The `evaluate` function below is for generating the data for Table 3.1 and the top half of Table 3.3. The `evaluate_power` function is for generating the the data for bottom half of Table 3.3. The `get_table` formats two tables. The `transformation_power` function is for generating the data for Table 3.2.
 
 ```{r, warning = FALSE}
 get_loocv_rmse = function(model) {
@@ -217,27 +217,27 @@ continuous = c("Day","Hour","Temperature","Humidity","Wind","Visibility","DewPoi
 full_formula = as.formula(
     paste0('RentedBikeCount ~ (.)^2 + factor(Hour) + ', paste0('I(',continuous,'^2)*.',collapse = ' + ')))
 model_fact6 = lm(RentedBikeCount ~ (.)^2 + factor(Hour) + I(Temperature^2)*. + I(Wind^2)*., data = bike_trn)
-model_fact7 = lm(RentedBikeCount ~ (.)^2 + factor(Hour) + I(Temperature^2)*. + I(Wind^2)*. + I(Hour^2)*., data = bike_trn)
 model_full = lm(full_formula, data = bike_trn)
-models = list(model_add, model_fact, model_fact2, model_fact3, model_fact4, model_fact5, model_fact6, model_fact7, model_full)
+models = list(model_add, model_fact, model_fact2, model_fact3, model_fact4, model_fact5, model_fact6, model_full)
 ```
 
 ```{r, warning = FALSE}
 frame = evaluate(models, row_names = c("Additive","Hour as Factor","Interaction with Temp",
                     "Interaction with Temp,Hour","Interaction with Temp,Humidity,Hour",
-                    "All Interaction", "All Interaction (Quadratic for Wind/Temp)", "All Interaction (Quadratic for Wind/Temp/Hour", "All Interaction with Quadratics"))
+                    "All Interaction", "All Interaction (Quadratic for Wind/Temp)", "All Interaction with Quadratics"))
 table_eval1 = get_table(frame, title = "Evaluation of Initial Models")
 ```
 
 Once we selected the initial model we liked best based on the metrics above, we ran this through AIC and BIC procedures in an attempt to simplify the model without sacrificing accuracy to a material degree.
 
 ```{r, message = FALSE, warning = FALSE, fig.height= 15, fig.width = 15}
-#aic_model = step(model_fact7, direction = "backward", trace = 0)
-#bic_model = step(model_fact7, span = RentedBikeCount ~ 1, direction = "backward", k = log(trn_size), trace = 0)
-#aic_formula = aic_model$terms
-#bic_formula = bic_model$terms
-#anova(bic_model, bic_model2)
-
+'
+aic_model = step(model_fact7, direction = "backward", trace = 0)
+bic_model = step(model_fact7, span = RentedBikeCount ~ 1, direction = "backward", k = log(trn_size), trace = 0)
+aic_formula = aic_model$terms
+bic_formula = bic_model$terms
+anova(bic_model, bic_model2)
+'
 aic_formula = formula(RentedBikeCount ~ Day + Month + Hour + Temperature + Humidity + 
      Wind + Visibility + DewPoint + SolarRadiation + Rainfall + 
      Snowfall + Season + Holiday + Functional + factor(Hour) + 
@@ -278,16 +278,18 @@ bic_formula = formula(RentedBikeCount ~ Day + Month + Hour + Temperature + Humid
      SolarRadiation:Functional + Rainfall:Snowfall + Season:Holiday + 
      Day:I(Temperature^2) + Month:I(Temperature^2) + DewPoint:I(Temperature^2) + 
      Rainfall:I(Temperature^2) + Season:I(Temperature^2) + Holiday:I(Temperature^2) + 
-     Hour:I(Wind^2) + Season:I(Wind^2))
+    Hour:I(Wind^2) + Season:I(Wind^2))
 aic_model = lm(aic_formula, data = bike_trn)
 bic_model = lm(bic_formula, data = bike_trn)
 ```
+
+The BIC model was only slightly worse than the AIC model while lowering the number of parameters from 140 to 99 so the model selected from backward stepwise regression using BIC was the initial choice of model.
 
 ```{r, message = FALSE}
 plot_diag1 = plot_diagnostics(bic_model, "BIC Model with no Transform")
 ```
 
-Try transformations of response variable to fix diagnostics
+The residuals of the BIC model do not show constant variance and shows a typical situation (as the response variable is bounded by 0 and no upper bound) where the variance is higher when the predicted value is higher so try a transformation of the response variable where the power is below 1. Note a log transformation is inappropriate due to the presence of many 0 values.
 
 ```{r, warning = FALSE}
 bike_shift = bike_trn
@@ -303,6 +305,8 @@ plot_boxcox = ggplot(data.frame(lambda = bc$x, like = bc$y), aes(x = lambda, y =
   ggtitle("BoxCox Plot")
 ```
 
+Below, we compute the adjusted $R^{2}$ and Test RMSE when transforming the response variable (testing powers of 0.2-1.0 in increments of 0.1 on the response variable). Note the adjusted $R^{2}$ was calculated using the $R^{2}$ of the back transformed predicted values and then multiplied by a factor `summary(model)$adj.r.squared/summary(model)$r.squared`. Table 3.3 shows that a square root transformation actually improves the test RMSE and adjusted $R^{2}$ while giving the residuals closer to constant variance.
+
 ```{r, warning = FALSE}
 try_powers = seq(0.2,1,0.1)
 power_RMSE = t(sapply(seq(0.2,1,0.1), transformation_power, form = bic_formula))
@@ -313,11 +317,12 @@ table_transform = kable(power_RMSE, digits = c(3,1), caption = "Adjusted R^2 and
   kable_styling(bootstrap_options = c("striped", "hover", "bordered", "condensed", "responsive"))
 ```
 
-
-
 ```{r, warning = FALSE}
 bic_sqrt = lm(update(bic_formula, sqrt(.) ~ . ), data = bike_trn)
 ```
+
+The `bic_sqrt` model has the same exact parameters as the model selected from backward step wise regression using BIC (full model was `model_fact6`).
+The best model `best_model` below was found manually after removing some parameters that not logical to be there from the `bic_sqrt_full` model and is between the `bic_sqrt` and `bic_sqrt_full` model in complexity and number of parameters.
 
 ```{r, warning = FALSE, message = FALSE}
 bic_sqrt_full = lm(sqrt(RentedBikeCount) ~ (.)^2 + factor(Hour) + I(Day^2) * . + 
@@ -348,7 +353,7 @@ best_model = lm(best_formula, data = bike_trn)
 sqrt_models = list(bic_sqrt, best_model, bic_sqrt_full)
 frame2_sqrt = evaluate_power(sqrt_models, power = 0.5, c("BIC Sqrt","BIC Sqrt Optimal", "BIC Sqrt Full"))
 
-models = list(model_fact7, aic_model, bic_model)
+models = list(model_fact6, aic_model, bic_model)
 frame2 = evaluate(models, row_names = c("All Interaction", "AIC Model", "BIC Model"))
 frame3 = rbind(frame2, frame2_sqrt)
 rownames(frame3) = c("All Interaction (Linear)", "AIC Model (Linear)", "BIC Model (Linear)","BIC Model (Sqrt Transform)", "Selected Model (Sqrt Transform)", "Full Model (Sqrt Transform)") 
@@ -356,6 +361,7 @@ table_eval2 = get_table(frame3, title = "Evaluation of Models (LOOCV-RMSE/BIC of
 plot_diag2 = plot_diagnostics(best_model, "BIC Model with Transform")
 ```
 
+We try 10-fold cross-validation to measure how much better the selected model is compared to the model chosen by BIC and the naive additive model.
 
 ```{r, warning = FALSE, message = FALSE}
 library(DAAG)
@@ -396,6 +402,8 @@ plot_CV2 = ggplot(res, aes(x = MAE_CV, y = MSE,  color = model)) +
   ylab("Root Mean Squared Error") +
   ggtitle("Measuring Variance of Models with 10-fold Cross-Validation")
 ```
+
+The Cross-Validation plot on Figure \@ref(fig:fig4) generally shows the selected model (manually) performs better than the BIC model with lower RMSE and MAE. The Figure \@ref(fig:fig5) shows however more variance in the selected model than the BIC model and one of the 10 folds often has high RMSE.
 
 
 ```{r, warning = FALSE}
@@ -439,8 +447,7 @@ plot_hour_holidayerror = ggplot(hour_holidayerror, aes(x = Hour, group = Holiday
 ```
 
 
-```{r}
-```
+
 
 ```{r, message = FALSE}
 hour_seasonerror = data %>%
