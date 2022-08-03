@@ -334,12 +334,14 @@ plot_boxcox = ggplot(data.frame(lambda = bc$x, like = bc$y), aes(x = lambda, y =
 Below, we compute the adjusted $R^{2}$ and Test RMSE when transforming the response variable (testing powers of 0.2-1.0 in increments of 0.1 on the response variable). Note the adjusted $R^{2}$ was calculated using the $R^{2}$ of the back transformed predicted values and then multiplied by a factor `summary(model)$adj.r.squared/summary(model)$r.squared`. Table 3.3 shows that a square root transformation actually improves the test RMSE and adjusted $R^{2}$ while giving the residuals closer to constant variance.
 
 ```{r, warning = FALSE}
-try_powers = seq(0.2,1,0.1)
-power_RMSE = t(sapply(seq(0.2,1,0.1), transformation_power, form = bic_formula, offset = 0))
-colnames(power_RMSE) = c("Adjusted R^2","Test RMSE","Proportion of Predictions < 0 in Test Set")
-rownames(power_RMSE) = try_powers
-table_transform = kable(power_RMSE, digits = c(3,1,4), caption = "Adjusted R^2 and Test RMSE using power transformations of response variable of BIC model (Predictions Clamped at 0)") %>%
-  column_spec(2, bold = power_RMSE[,1] == max(power_RMSE[,1])) %>% column_spec(3, bold = power_RMSE[,2] == min(power_RMSE[,2])) %>%
+try_powers = seq(0.1,1,0.1)
+power_RMSE = t(sapply(try_powers, transformation_power, form = bic_formula, offset = 0))
+power_RMSE = cbind(try_powers, power_RMSE)
+colnames(power_RMSE) = c("Power to Response Variable", "Adjusted R^2","Test RMSE","Proportion of Predictions < 0 in Test Set")
+table_transform = kable(power_RMSE, digits = c(1,3,1,4), 
+                        caption = "Adjusted R^2 and Test RMSE using power transformations of response variable of BIC model") %>%
+  column_spec(2, bold = power_RMSE[,2] == max(power_RMSE[,2])) %>% 
+  column_spec(3, bold = power_RMSE[,3] == min(power_RMSE[,3])) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "bordered", "condensed", "responsive"))
 ```
 
