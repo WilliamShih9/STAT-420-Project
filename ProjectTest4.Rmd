@@ -74,7 +74,7 @@ draw_plot = function(data){
   data %>%
     gather(-RentedBikeCount, key = "xaxis", value = "value") %>%
     ggplot(aes(x = value, y = RentedBikeCount)) + 
-    geom_point(alpha = 0.3) + theme_bw() +
+    geom_point() + theme_bw() +
     stat_smooth(geom = "smooth", size = 2, level = 0.95) +
     facet_wrap(xaxis ~ ., scales = "free_x")
 }
@@ -167,11 +167,11 @@ plot_diagnostics = function(model, title){
   require(ggplot2)
   require(grid)
   require(gridExtra)
-    pcol = "black"
+    pcol = "grey"
     lcol = "dodgerblue"
     data1 = data.frame(Fitted = fitted(model), Residuals = resid(model))
     plot1 = ggplot(data1, aes(x = Fitted, y = Residuals)) +
-      geom_point(alpha = 0.3, color = pcol) + theme_bw() + geom_hline(yintercept = 0, color = lcol) + 
+      geom_point(color = pcol) + theme_bw() + geom_hline(yintercept = 0, color = lcol) + 
       stat_smooth() +
       ggtitle(paste("Fitted vs Residuals for\n",title))
     plot2 = ggplot(data1, aes(sample = Residuals)) + 
@@ -258,39 +258,53 @@ Once we selected the initial model we liked best based on the metrics above, we 
 
 ```{r, message = FALSE, warning = FALSE, fig.height= 15, fig.width = 15}
 
-#aic_model = step(model_fact6, direction = "backward", trace = 0)
-#bic_model = step(model_fact6, span = RentedBikeCount ~ 1, direction = "backward", k = log(trn_size), trace = 0)
+#aic_model = step(model_fact7, direction = "backward", trace = 0)
+#bic_model = step(model_fact7, span = RentedBikeCount ~ 1, direction = "backward", k = log(trn_size), trace = 0)
 #aic_formula = aic_model$terms
 #bic_formula = bic_model$terms
-aic_formula = formula(RentedBikeCount ~ . + factor(Hour) + I(Temperature^2) + I(Wind^2) +
-    Day:(Month+Humidity+Wind+Visibility+SolarRadiation+Season+Holiday)+
-    Month:(Temperature+Visibility+DewPoint+SolarRadiation+Season+Holiday+Functional)+
-    Hour:(Temperature+Humidity+Wind+Visibility+DewPoint+SolarRadiation+Rainfall+
-    Snowfall+Season+Holiday+Functional)+
-    Temperature:(Wind+Visibility+DewPoint+SolarRadiation+Rainfall+Season)+
-    Humidity:(Wind+Visibility+DewPoint+SolarRadiation+Rainfall+Season+Holiday+Functional)+
-    Wind:(Visibility+DewPoint+SolarRadiation+Season)+
-    Visibility:(DewPoint+SolarRadiation)+
-    DewPoint:(SolarRadiation+Rainfall+Season+Functional)+
-    SolarRadiation:(Season+Functional)+
-    Rainfall:(Snowfall+Season)+
-    Season:(Holiday+Functional)+ Holiday:Functional+
-    I(Temperature^2):(Day+Month+Wind+DewPoint+Rainfall+Season+Holiday)+
-    I(Wind^2):(Hour+Temperature+Humidity+Wind+Visibility+DewPoint+Rainfall+Snowfall+Season))
+#anova(bic_model, bic_model2)
 
-bic_formula = formula(RentedBikeCount ~  Day + Month + Hour + Temperature + Humidity + Wind + 
-  Visibility + DewPoint + SolarRadiation + Rainfall + Snowfall + Season + Holiday + Functional +   
-  factor(Hour) + I(Temperature^2) + I(Wind^2) +
-  Day:Holiday + Month:(Temperature+DewPoint+Season+Holiday)+
-  Hour:(Temperature+Humidity+Wind+DewPoint+SolarRadiation+Rainfall+Holiday+Functional)+
-  Temperature:(Visibility+DewPoint+Rainfall+Season)+
-  Humidity:(Visibility+DewPoint+SolarRadiation+Season+Functional)+
-  Wind:(SolarRadiation+Rainfall+Season)+ Visibility:DewPoint + 
-  DewPoint:(SolarRadiation+Rainfall+Season+Functional)+
-  SolarRadiation:Functional + Rainfall:Snowfall + Season:Holiday +
-  I(Temperature^2):(Day+Month+DewPoint+Rainfall+Season+Holiday)+
-  I(Wind^2):(Hour + Season))
-
+aic_formula = formula(RentedBikeCount ~ Day + Month + Hour + Temperature + Humidity + 
+     Wind + Visibility + DewPoint + SolarRadiation + Rainfall + 
+     Snowfall + Season + Holiday + Functional + factor(Hour) + 
+     I(Temperature^2) + I(Wind^2) + Day:Month + Day:Humidity + 
+     Day:Wind + Day:Visibility + Day:SolarRadiation + Day:Season + 
+     Day:Holiday + Month:Temperature + Month:Visibility + Month:DewPoint + 
+     Month:SolarRadiation + Month:Season + Month:Holiday + Month:Functional + 
+     Hour:Temperature + Hour:Humidity + Hour:Wind + Hour:Visibility + 
+     Hour:DewPoint + Hour:SolarRadiation + Hour:Rainfall + Hour:Snowfall + 
+     Hour:Season + Hour:Holiday + Hour:Functional + Temperature:Wind + 
+     Temperature:Visibility + Temperature:DewPoint + Temperature:SolarRadiation + 
+     Temperature:Rainfall + Temperature:Season + Humidity:Wind + 
+     Humidity:Visibility + Humidity:DewPoint + Humidity:SolarRadiation + 
+     Humidity:Rainfall + Humidity:Season + Humidity:Holiday + 
+     Humidity:Functional + Wind:Visibility + Wind:DewPoint + Wind:SolarRadiation + 
+     Wind:Season + Visibility:DewPoint + Visibility:SolarRadiation + 
+     DewPoint:SolarRadiation + DewPoint:Rainfall + DewPoint:Season + 
+     DewPoint:Functional + SolarRadiation:Season + SolarRadiation:Functional + 
+     Rainfall:Snowfall + Rainfall:Season + Season:Holiday + Season:Functional + 
+     Holiday:Functional + Day:I(Temperature^2) + Month:I(Temperature^2) + 
+     Wind:I(Temperature^2) + DewPoint:I(Temperature^2) + Rainfall:I(Temperature^2) + 
+     Season:I(Temperature^2) + Holiday:I(Temperature^2) + Hour:I(Wind^2) + 
+     Temperature:I(Wind^2) + Humidity:I(Wind^2) + Wind:I(Wind^2) + 
+     Visibility:I(Wind^2) + DewPoint:I(Wind^2) + Rainfall:I(Wind^2) + 
+     Snowfall:I(Wind^2) + Season:I(Wind^2))
+bic_formula = formula(RentedBikeCount ~ Day + Month + Hour + Temperature + Humidity + 
+     Wind + Visibility + DewPoint + SolarRadiation + Rainfall + 
+     Snowfall + Season + Holiday + Functional + factor(Hour) + 
+     I(Temperature^2) + I(Wind^2) + Day:Holiday + Month:Temperature + 
+     Month:DewPoint + Month:Season + Month:Holiday + Hour:Temperature + 
+     Hour:Humidity + Hour:Wind + Hour:DewPoint + Hour:SolarRadiation + 
+     Hour:Rainfall + Hour:Holiday + Hour:Functional + Temperature:Visibility + 
+     Temperature:DewPoint + Temperature:Rainfall + Temperature:Season + 
+     Humidity:Visibility + Humidity:DewPoint + Humidity:SolarRadiation + 
+     Humidity:Season + Humidity:Functional + Wind:SolarRadiation + 
+     Wind:Rainfall + Wind:Season + Visibility:DewPoint + DewPoint:SolarRadiation + 
+     DewPoint:Rainfall + DewPoint:Season + DewPoint:Functional + 
+     SolarRadiation:Functional + Rainfall:Snowfall + Season:Holiday + 
+     Day:I(Temperature^2) + Month:I(Temperature^2) + DewPoint:I(Temperature^2) + 
+     Rainfall:I(Temperature^2) + Season:I(Temperature^2) + Holiday:I(Temperature^2) + 
+    Hour:I(Wind^2) + Season:I(Wind^2))
 aic_model = lm(aic_formula, data = bike_trn)
 bic_model = lm(bic_formula, data = bike_trn)
 ```
@@ -332,7 +346,7 @@ table_transform = kable(power_RMSE, digits = c(1,3,1,4),
 ```
 
 ```{r, warning = FALSE}
-bic_sqrt = lm(update(bic_formula, sqrt(.) ~ .), data = bike_trn)
+bic_sqrt = lm(update(bic_formula, sqrt(.) ~ . ), data = bike_trn)
 ```
 
 The `bic_sqrt` model has the same exact parameters as the model selected from backward step wise regression using BIC (full model was `model_fact6`).
@@ -343,27 +357,25 @@ bic_sqrt_full = lm(sqrt(RentedBikeCount) ~ (.)^2 + factor(Hour) + I(Day^2) * . +
     I(Hour^2) * . + I(Temperature^2) * . + I(Humidity^2) * . + 
     I(Wind^2) * . + I(Visibility^2) * . + I(DewPoint^2) * . + 
     I(SolarRadiation^2) * . + I(Rainfall^2) * . + I(Snowfall^2) * ., data = bike_trn)
-
 best_formula = formula(sqrt(RentedBikeCount) ~ .-Day + factor(Hour) + 
-  I(Temperature^2) + I(Humidity^2) + I(Wind^2) + 
-  I(Visibility^2) + I(DewPoint^2) + I(SolarRadiation^2) + I(Rainfall^2) + 
-  I(Snowfall^2) + Month:(Season + Holiday) +
-  Hour:(Temperature + Humidity + Visibility + SolarRadiation + Rainfall + Season + Holiday + Functional) + 
-  Temperature:(Humidity + DewPoint + SolarRadiation + Rainfall + Season + Holiday + Functional) + 
-  Humidity:(Visibility + DewPoint + Rainfall + Holiday + Functional) + 
-  Wind:(Visibility + DewPoint) + Visibility:Rainfall + 
-  DewPoint:(Rainfall + Season + Functional) + 
-  SolarRadiation:Holiday + Rainfall:Functional + Season:Holiday +
-  I(Hour^2):(Temperature + Season) + I(Hour^3):Temperature + 
-  I(Temperature^2):(Temperature + Humidity + DewPoint + Rainfall + Season) + 
-  I(Humidity^2):(Hour + Temperature + Humidity + Wind + Functional) + 
-  I(Wind^2):(Humidity + Visibility + DewPoint) +
-  I(Visibility^2):(Hour + Temperature + Humidity + Visibility + DewPoint + Rainfall) +
-  I(DewPoint^2):(Humidity + DewPoint + SolarRadiation + Rainfall) +
-  I(SolarRadiation^2):(SolarRadiation + Rainfall + Holiday) +
-  I(Rainfall^2):(Temperature + Humidity + DewPoint + SolarRadiation + Rainfall + Functional) +
-  I(Snowfall^2):(Wind + Visibility + Snowfall))
-
+      I(Temperature^2) + I(Humidity^2) + I(Wind^2) + 
+      I(Visibility^2) + I(DewPoint^2) + I(SolarRadiation^2) + I(Rainfall^2) + 
+      I(Snowfall^2) + Month:(Season + Holiday) +
+      Hour:(Temperature + Humidity + Visibility + SolarRadiation + Rainfall + Season + Holiday + Functional) + 
+      Temperature:(Humidity + DewPoint + SolarRadiation + Rainfall + Season + Holiday + Functional) + 
+      Humidity:(Visibility + DewPoint + Rainfall + Holiday + Functional) + 
+      Wind:(Visibility + DewPoint) + Visibility:Rainfall + 
+      DewPoint:(Rainfall + Season + Functional) + 
+      SolarRadiation:Holiday + Rainfall:Functional + Season:Holiday +
+			I(Hour^2):(Temperature + Season) + I(Hour^3):Temperature + 
+      I(Temperature^2):(Temperature + Humidity + DewPoint + Rainfall + Season) + 
+      I(Humidity^2):(Hour + Temperature + Humidity + Wind + Functional) + 
+      I(Wind^2):(Humidity + Visibility + DewPoint) +
+      I(Visibility^2):(Hour + Temperature + Humidity + Visibility + DewPoint + Rainfall) +
+      I(DewPoint^2):(Humidity + DewPoint + SolarRadiation + Rainfall) +
+      I(SolarRadiation^2):(SolarRadiation + Rainfall + Holiday) +
+      I(Rainfall^2):(Temperature + Humidity + DewPoint + SolarRadiation + Rainfall + Functional) +
+      I(Snowfall^2):(Wind + Visibility + Snowfall))
 best_model = lm(best_formula, data = bike_trn)
 
 sqrt_models = list(bic_sqrt, best_model, bic_sqrt_full)
@@ -414,7 +426,7 @@ plot_CV = ggplot(res, aes(x = MAE, y = MSE,  color = model)) +
   ylab("Root Mean Squared Error") + xlim(100, 350) + ylim(200, 500) +
   ggtitle("MAE and RMSE of 10-fold Cross-Validation of Select Models")
 plot_CV2 = ggplot(res, aes(x = MAE_CV, y = MSE,  color = model)) +
-  geom_point(size = 3) + theme_bw() + xlab("Average Absolute Difference Between Cross-Validation Prediction\nand Prediction Using Entire Training Set") +
+  geom_point(size = 3) + theme_bw() + xlab("Average Difference Between CV Prediction and All Data Prediction") +
   ylab("Root Mean Squared Error") +
   ggtitle("Measuring Variance of Models with 10-fold Cross-Validation")
 ```
@@ -441,11 +453,10 @@ data$Predicted_BikeCount =  predict(best_model, data)^2
 data$Error = data$RentedBikeCount - data$Predicted_BikeCount
 plot_error = ggplot(data[-trn_idx, ], aes(x = RentedBikeCount, y = Error)) +
   geom_point(alpha = 0.3) + 
-  stat_smooth(method = "loess", formula = "y~x", se = FALSE) + xlab("Actual Bike Count") +
+  stat_smooth(method = "loess", formula = "y~x", se = FALSE) + 
   theme_bw() + ggtitle("Actual Bike Count vs Error (Actual - Predicted)")
 plot_actual = ggplot(data[-trn_idx, ], aes(x = Predicted_BikeCount, y = RentedBikeCount)) +
   geom_point(alpha = 0.3) + coord_fixed() +
-  xlab("Predicted Bike Count") + ylab("Actual Bike Count") +
   stat_smooth(method = "loess", formula = "y~x", se = FALSE) + 
   theme_bw() + ggtitle("Predicted vs Actual Bike Count")
 ```
@@ -492,8 +503,8 @@ plot_hourerror = ggplot(hourerror, aes(x = Hour, y = Error)) +
 montherror = data %>%
   group_by(Month) %>%
   summarize(Error = 100 * Metrics::smape(RentedBikeCount, Predicted_BikeCount))
-plot_montherror = ggplot(montherror, aes(x = factor(Month), y = Error)) +
-  theme_bw() + geom_bar(stat = 'identity', position = 'dodge') + xlab("Month") +
+plot_montherror = ggplot(montherror, aes(x = Month, y = Error)) + 
+  theme_bw() + geom_bar(stat = 'identity', position = 'dodge') +
   ylab("Symmetric mean absolute percentage error") + 
   ggtitle("Symmetric mean absolute percentage error by Month")
 ```

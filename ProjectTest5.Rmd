@@ -54,7 +54,7 @@ data = dplyr::select(data, -Year)
 
 We investigated the data, particularly how predictors related to each other through collinearity.  Below is a correlation plot describing each.  Temperature and (to a lesser degree) Humidity both had high correlation to Dewpoint.
 
-```{r fig-1, message = FALSE, warning = FALSE, fig.cap = "Fig-1", fig.align = 'center'}
+```{r fig-1, message = FALSE, warning = FALSE, fig.cap = "Correlation Plot of Continuous Variables", fig.align = 'center'}
 correlations = round(cor(data %>% select(-c(Day, Month, Season, Holiday, Functional))), 2)
 cor_melt = reshape2::melt(correlations)
 ggplot(cor_melt, aes(x = Var1, y = Var2, fill = value)) +
@@ -69,35 +69,35 @@ ggplot(cor_melt, aes(x = Var1, y = Var2, fill = value)) +
 
 We looked at the response 'RentedBikeCount' as it relates to the various predictors we have available.  Below we compared time and date (Day, Month and Hour), as well as environment predictors like temperature, humidity, rainfall, snowfall, solar radiation, etc.
 
-```{r fig-2, message = FALSE, warning = FALSE, fig.cap = "Fig-2", fig.align = 'center'}
+```{r fig-2, message = FALSE, warning = FALSE, fig.cap = "Number of Rented Bikes by Hour/Day/Month", fig.align = 'center'}
 draw_plot = function(data){
   data %>%
     gather(-RentedBikeCount, key = "xaxis", value = "value") %>%
     ggplot(aes(x = value, y = RentedBikeCount)) + 
-    geom_point() + theme_bw() +
-    stat_smooth(geom = "smooth", size = 2, level = 0.95) +
+    geom_point(alpha = 0.3) + theme_bw() +
+    stat_smooth(geom = "smooth", size = 2, level = 0.95) + ylab("Number of Rented Bikes") +
     facet_wrap(xaxis ~ ., scales = "free_x")
 }
 draw_plot(data %>% select(RentedBikeCount, Hour, Day, Month))
 ```
 
-```{r fig-3, message = FALSE, warning = FALSE, fig.cap = "Fig-3", fig.align = 'center'}
+```{r fig-3, message = FALSE, warning = FALSE, fig.cap = "Number of Rented Bikes by Temperature/Humidity/Wind/Visilibty", fig.align = 'center'}
 draw_plot(data %>% select(RentedBikeCount, Temperature, Humidity, Wind, Visibility) %>%
   rename(`Humidity (%)` = Humidity, `Temperature (C)` = Temperature, `Wind (m/s)` = Wind, `Visibility (10 m)` = Visibility))
 ```
 
-```{r fig-4, message = FALSE, fig.cap = "Fig-4", fig.align = 'center'}
+```{r fig-4, message = FALSE, fig.cap = "Number of Rented Bikes by Solar Radiation, Rainfall, Snowfall", fig.align = 'center'}
 draw_plot(data %>% select(RentedBikeCount, SolarRadiation, Rainfall, Snowfall) %>%
   rename(`Solar radiation (MJ/m2)` = SolarRadiation, `Rainfall (mm)` = Rainfall, `Snowfall (cm)` = Snowfall))
 ```
 
-```{r fig-5, message = FALSE, warning = FALSE, fig.cap = "Fig-5", fig.align = 'center'}
+```{r fig-5, message = FALSE, warning = FALSE, fig.cap = "Box Plot of Rented Bikes by Season of Year, Holiday, Functional", fig.align = 'center'}
 data %>%
   select(RentedBikeCount, Season, Holiday, Functional) %>%
   rename(`Functional Day` = Functional) %>%
   pivot_longer(., -RentedBikeCount, names_to = "Variable", values_to = "Value") %>%
   ggplot(aes(x = Value, y = RentedBikeCount)) + theme_bw() + 
-    geom_boxplot() + 
+    geom_boxplot() + ylab("Number of Rented Bikes") +
     facet_wrap(. ~ Variable, scales = "free_x")
 ```
 
@@ -167,20 +167,18 @@ plot_diagnostics = function(model, title){
   require(ggplot2)
   require(grid)
   require(gridExtra)
-    pcol = "grey"
+    pcol = "black"
     lcol = "dodgerblue"
     data1 = data.frame(Fitted = fitted(model), Residuals = resid(model))
     plot1 = ggplot(data1, aes(x = Fitted, y = Residuals)) +
-      geom_point(color = pcol) + theme_bw() + geom_hline(yintercept = 0, color = lcol) + 
+      geom_point(alpha = 0.3, color = pcol) + theme_bw() + geom_hline(yintercept = 0, color = lcol) + 
       stat_smooth() +
       ggtitle(paste("Fitted vs Residuals for\n",title))
     plot2 = ggplot(data1, aes(sample = Residuals)) + 
       stat_qq(color = pcol) + stat_qq_line(color = lcol) + theme_bw() +
       xlab("Theoretical Quantiles") + ylab("Sample Quantiles") +
       ggtitle(paste("Normal Q-Q Plot for\n",title))
-    #arrangeGrob(plot1, plot2, ncol = 2)
-    grid.arrange(plot1, plot2, ncol=2)
-    
+    arrangeGrob(plot1, plot2, nrow = 1, ncol = 2)
 }
 
 transformation_power = function(pow, form, offset){
@@ -260,53 +258,39 @@ Once we selected the initial model we liked best based on the metrics above, we 
 
 ```{r, message = FALSE, warning = FALSE, fig.height= 15, fig.width = 15}
 
-#aic_model = step(model_fact7, direction = "backward", trace = 0)
-#bic_model = step(model_fact7, span = RentedBikeCount ~ 1, direction = "backward", k = log(trn_size), trace = 0)
+#aic_model = step(model_fact6, direction = "backward", trace = 0)
+#bic_model = step(model_fact6, span = RentedBikeCount ~ 1, direction = "backward", k = log(trn_size), trace = 0)
 #aic_formula = aic_model$terms
 #bic_formula = bic_model$terms
-#anova(bic_model, bic_model2)
+aic_formula = formula(RentedBikeCount ~ . + factor(Hour) + I(Temperature^2) + I(Wind^2) +
+    Day:(Month+Humidity+Wind+Visibility+SolarRadiation+Season+Holiday)+
+    Month:(Temperature+Visibility+DewPoint+SolarRadiation+Season+Holiday+Functional)+
+    Hour:(Temperature+Humidity+Wind+Visibility+DewPoint+SolarRadiation+Rainfall+
+    Snowfall+Season+Holiday+Functional)+
+    Temperature:(Wind+Visibility+DewPoint+SolarRadiation+Rainfall+Season)+
+    Humidity:(Wind+Visibility+DewPoint+SolarRadiation+Rainfall+Season+Holiday+Functional)+
+    Wind:(Visibility+DewPoint+SolarRadiation+Season)+
+    Visibility:(DewPoint+SolarRadiation)+
+    DewPoint:(SolarRadiation+Rainfall+Season+Functional)+
+    SolarRadiation:(Season+Functional)+
+    Rainfall:(Snowfall+Season)+
+    Season:(Holiday+Functional)+ Holiday:Functional+
+    I(Temperature^2):(Day+Month+Wind+DewPoint+Rainfall+Season+Holiday)+
+    I(Wind^2):(Hour+Temperature+Humidity+Wind+Visibility+DewPoint+Rainfall+Snowfall+Season))
 
-aic_formula = formula(RentedBikeCount ~ Day + Month + Hour + Temperature + Humidity + 
-     Wind + Visibility + DewPoint + SolarRadiation + Rainfall + 
-     Snowfall + Season + Holiday + Functional + factor(Hour) + 
-     I(Temperature^2) + I(Wind^2) + Day:Month + Day:Humidity + 
-     Day:Wind + Day:Visibility + Day:SolarRadiation + Day:Season + 
-     Day:Holiday + Month:Temperature + Month:Visibility + Month:DewPoint + 
-     Month:SolarRadiation + Month:Season + Month:Holiday + Month:Functional + 
-     Hour:Temperature + Hour:Humidity + Hour:Wind + Hour:Visibility + 
-     Hour:DewPoint + Hour:SolarRadiation + Hour:Rainfall + Hour:Snowfall + 
-     Hour:Season + Hour:Holiday + Hour:Functional + Temperature:Wind + 
-     Temperature:Visibility + Temperature:DewPoint + Temperature:SolarRadiation + 
-     Temperature:Rainfall + Temperature:Season + Humidity:Wind + 
-     Humidity:Visibility + Humidity:DewPoint + Humidity:SolarRadiation + 
-     Humidity:Rainfall + Humidity:Season + Humidity:Holiday + 
-     Humidity:Functional + Wind:Visibility + Wind:DewPoint + Wind:SolarRadiation + 
-     Wind:Season + Visibility:DewPoint + Visibility:SolarRadiation + 
-     DewPoint:SolarRadiation + DewPoint:Rainfall + DewPoint:Season + 
-     DewPoint:Functional + SolarRadiation:Season + SolarRadiation:Functional + 
-     Rainfall:Snowfall + Rainfall:Season + Season:Holiday + Season:Functional + 
-     Holiday:Functional + Day:I(Temperature^2) + Month:I(Temperature^2) + 
-     Wind:I(Temperature^2) + DewPoint:I(Temperature^2) + Rainfall:I(Temperature^2) + 
-     Season:I(Temperature^2) + Holiday:I(Temperature^2) + Hour:I(Wind^2) + 
-     Temperature:I(Wind^2) + Humidity:I(Wind^2) + Wind:I(Wind^2) + 
-     Visibility:I(Wind^2) + DewPoint:I(Wind^2) + Rainfall:I(Wind^2) + 
-     Snowfall:I(Wind^2) + Season:I(Wind^2))
-bic_formula = formula(RentedBikeCount ~ Day + Month + Hour + Temperature + Humidity + 
-     Wind + Visibility + DewPoint + SolarRadiation + Rainfall + 
-     Snowfall + Season + Holiday + Functional + factor(Hour) + 
-     I(Temperature^2) + I(Wind^2) + Day:Holiday + Month:Temperature + 
-     Month:DewPoint + Month:Season + Month:Holiday + Hour:Temperature + 
-     Hour:Humidity + Hour:Wind + Hour:DewPoint + Hour:SolarRadiation + 
-     Hour:Rainfall + Hour:Holiday + Hour:Functional + Temperature:Visibility + 
-     Temperature:DewPoint + Temperature:Rainfall + Temperature:Season + 
-     Humidity:Visibility + Humidity:DewPoint + Humidity:SolarRadiation + 
-     Humidity:Season + Humidity:Functional + Wind:SolarRadiation + 
-     Wind:Rainfall + Wind:Season + Visibility:DewPoint + DewPoint:SolarRadiation + 
-     DewPoint:Rainfall + DewPoint:Season + DewPoint:Functional + 
-     SolarRadiation:Functional + Rainfall:Snowfall + Season:Holiday + 
-     Day:I(Temperature^2) + Month:I(Temperature^2) + DewPoint:I(Temperature^2) + 
-     Rainfall:I(Temperature^2) + Season:I(Temperature^2) + Holiday:I(Temperature^2) + 
-    Hour:I(Wind^2) + Season:I(Wind^2))
+bic_formula = formula(RentedBikeCount ~  Day + Month + Hour + Temperature + Humidity + Wind + 
+  Visibility + DewPoint + SolarRadiation + Rainfall + Snowfall + Season + Holiday + Functional +   
+  factor(Hour) + I(Temperature^2) + I(Wind^2) +
+  Day:Holiday + Month:(Temperature+DewPoint+Season+Holiday)+
+  Hour:(Temperature+Humidity+Wind+DewPoint+SolarRadiation+Rainfall+Holiday+Functional)+
+  Temperature:(Visibility+DewPoint+Rainfall+Season)+
+  Humidity:(Visibility+DewPoint+SolarRadiation+Season+Functional)+
+  Wind:(SolarRadiation+Rainfall+Season)+ Visibility:DewPoint + 
+  DewPoint:(SolarRadiation+Rainfall+Season+Functional)+
+  SolarRadiation:Functional + Rainfall:Snowfall + Season:Holiday +
+  I(Temperature^2):(Day+Month+DewPoint+Rainfall+Season+Holiday)+
+  I(Wind^2):(Hour + Season))
+
 aic_model = lm(aic_formula, data = bike_trn)
 bic_model = lm(bic_formula, data = bike_trn)
 ```
@@ -330,7 +314,7 @@ plot_boxcox = ggplot(data.frame(lambda = bc$x, like = bc$y), aes(x = lambda, y =
   geom_vline(aes(xintercept = best_lambda, color = "Max"), size = 2) + theme_bw() +
   geom_vline(aes(xintercept = 0.5, color = "Square Root"), size = 2) +
   geom_vline(aes(xintercept = 1, color = "Linear"), size = 2) +
-  ggtitle("BoxCox Plot")
+  ggtitle("Box-Cox Plot from BIC Model with no Transform")
 plot_boxcox
 ```
 
@@ -429,7 +413,7 @@ plot_CV = ggplot(res, aes(x = MAE, y = MSE,  color = model)) +
   ylab("Root Mean Squared Error") + xlim(100, 350) + ylim(200, 500) +
   ggtitle("MAE and RMSE of 10-fold Cross-Validation of Select Models")
 plot_CV2 = ggplot(res, aes(x = MAE_CV, y = MSE,  color = model)) +
-  geom_point(size = 3) + theme_bw() + xlab("Average Difference Between CV Prediction and All Data Prediction") +
+  geom_point(size = 3) + theme_bw() + xlab("Average Absolute Difference Between Cross-Validation Prediction\nand Prediction Using Entire Training Set") +
   ylab("Root Mean Squared Error") +
   ggtitle("Measuring Variance of Models with 10-fold Cross-Validation")
 ```
@@ -456,10 +440,11 @@ data$Predicted_BikeCount =  predict(best_model, data)^2
 data$Error = data$RentedBikeCount - data$Predicted_BikeCount
 plot_error = ggplot(data[-trn_idx, ], aes(x = RentedBikeCount, y = Error)) +
   geom_point(alpha = 0.3) + 
-  stat_smooth(method = "loess", formula = "y~x", se = FALSE) + 
+  stat_smooth(method = "loess", formula = "y~x", se = FALSE) + xlab("Actual Bike Count") +
   theme_bw() + ggtitle("Actual Bike Count vs Error (Actual - Predicted)")
 plot_actual = ggplot(data[-trn_idx, ], aes(x = Predicted_BikeCount, y = RentedBikeCount)) +
   geom_point(alpha = 0.3) + coord_fixed() +
+  xlab("Predicted Bike Count") + ylab("Actual Bike Count") +
   stat_smooth(method = "loess", formula = "y~x", se = FALSE) + 
   theme_bw() + ggtitle("Predicted vs Actual Bike Count")
 ```
@@ -506,8 +491,8 @@ plot_hourerror = ggplot(hourerror, aes(x = Hour, y = Error)) +
 montherror = data %>%
   group_by(Month) %>%
   summarize(Error = 100 * Metrics::smape(RentedBikeCount, Predicted_BikeCount))
-plot_montherror = ggplot(montherror, aes(x = Month, y = Error)) + 
-  theme_bw() + geom_bar(stat = 'identity', position = 'dodge') +
+plot_montherror = ggplot(montherror, aes(x = factor(Month), y = Error)) +
+  theme_bw() + geom_bar(stat = 'identity', position = 'dodge') + xlab("Month") +
   ylab("Symmetric mean absolute percentage error") + 
   ggtitle("Symmetric mean absolute percentage error by Month")
 ```
@@ -524,70 +509,77 @@ table_eval1
 Plot 1 shows the diagnostics for the best model(BIC model with 99 parameters) chosen by running the 'All Interaction (Quadratic for Wind/Temp)' model with 191 parameters through backward AIC and BIC procedures. The Fitted Vs Residual plot shows that the constant variance assumption is violated and the Q-Q plot also shows fat tails meaning there is more data located at the extremes. We wanted to check if a transformation of the response variable can fix this. 
 
 
-```{r fig1, fig.cap = "Plot 1", echo = FALSE, fig.align = 'center'}
+```{r fig1, fig.cap = "Fitted vs Residuals and Q-Q Plot for BIC Model with no Transform", echo = FALSE, fig.align = 'center'}
 grid.draw(plot_diag1)
 ```
 
 From the Table 3.2 below it is evident that the square root transformation performed the best on the test set with adjusted R2 of 0.858
+
 ```{r tab2, echo = FALSE, fig.align = 'center'}
 table_transform
 ```
 
-```{r fig2, fig.cap = "Plot 2", echo = FALSE, fig.align = 'center'}
+```{r fig2, fig.cap = "Box-Cox Plot from BIC Model with no Transform", echo = FALSE, fig.align = 'center'}
 plot_boxcox
 ```
 
 The Fitted Vs Residuals plot for the best bic model with square root transform still does not show equal variance and there is no great improvement in the Q-Q plot as it still shows fat tails
-```{r fig3, fig.cap = "Plot 3", echo = FALSE, fig.align = 'center'}
-#grid.draw(plot_diag2)
-plot_diag2
+
+```{r fig3, fig.cap = "Fitted vs Residuals and Q-Q Plot for BIC Model with Sqrt Transform", echo = FALSE, fig.align = 'center'}
+grid.draw(plot_diag2)
 ```
 
 Table 3.3 below shows the error metrics on the Test set for different models. The BIC of the best model chosen previously greatly reduced after applying a square root transform of the response variable. The square root transform model with manually selection, lets call this the Selected Model(Sqrt Transform), of predictors emerged as the best model with the least error LOOCV-RMSE and least BIC
+
 ```{r tab3, echo = FALSE, fig.align = 'center'}
 table_eval2
 ```
+
 Plot 4 and Plot 5 show the MAE and RMSE values of the 10 fold Cross Validation of the selected models. It is evident that the Selected Model with square root transform performed the best with the least MAE and RMSE errors.
-```{r fig4, fig.cap = "Plot 4", echo = FALSE, fig.align = 'center'}
+
+```{r fig4, fig.cap = "Mean Absolute Error and Root Mean Squared Error of 10-fold Cross Validation of Models", echo = FALSE, fig.align = 'center'}
 plot_CV
 ```
 
-```{r fig5, fig.cap = "Plot 5", echo = FALSE, fig.align = 'center'}
+```{r fig5, fig.cap = "Measuring Variance of Models using 10-fold Cross Validation", echo = FALSE, fig.align = 'center'}
 plot_CV2
 ```
 
 Plot 7 shows that all the points are closer to the regressed diagonal line and follow the same trend as of the regression line giving us confidence in our predictions.
 
-```{r fig7, fig.cap = "Plot 7", echo = FALSE, fig.align = 'center'}
+```{r fig7, fig.cap = "Predicted vs Actual Number of Rented Bikes of Test Set using Selected Model (Sqrt Transform)", echo = FALSE, fig.align = 'center'}
 plot_actual
 ```
+
 Plot 6 shows the Actuals Vs Errors plotted. Most of the points are densely packed in the lower error regions around 0.
-```{r fig6, fig.cap = "Plot 6", echo = FALSE, fig.align = 'center'}
+
+```{r fig6, fig.cap = "Actual Number of Rented Bikes vs Error of Test Set using Selected Model (Sqrt Transform)", echo = FALSE, fig.align = 'center'}
 plot_error
 ```
 
 Plot 8 through 11 shows the Predicted Vs Actual with respect to different predictor Variables. In all the plots the predicted line captures the general pattern of the Actuals and is very close to the Actual line indicating a good fit.
-```{r fig8, fig.cap = "Plot 8", echo = FALSE, fig.align = 'center'}
+
+```{r fig8, fig.cap = "Predicted vs Actual Number of Rented Bikes of First 50 Hours of Data", echo = FALSE, fig.align = 'center'}
 plot_timeline1
 ```
 
-```{r fig9, fig.cap = "Plot 9", echo = FALSE, fig.align = 'center'}
+```{r fig9, fig.cap = "Predicted vs Actual Number of Rented Bikes of Hours 1001-1050 of Data", echo = FALSE, fig.align = 'center'}
 plot_timeline2
 ```
 
-```{r fig10, fig.cap = "Plot 10", echo = FALSE, fig.align = 'center'}
+```{r fig10, fig.cap = "Bias of Selected Model for Holidays vs Non-Holidays by Hour", echo = FALSE, fig.align = 'center'}
 plot_hour_holidayerror
 ```
 
-```{r fig11, fig.cap = "Plot 11", echo = FALSE, fig.align = 'center'}
+```{r fig11, fig.cap = "Bias of Selected Model by Season and Hour", echo = FALSE, fig.align = 'center'}
 plot_hour_seasonerror 
 ```
 
-```{r fig12, fig.cap = "Plot 12", echo = FALSE, fig.align = 'center'}
+```{r fig12, fig.cap = "Symmetric Mean Percentage Error by Hour of Selected Model", echo = FALSE, fig.align = 'center'}
 plot_hourerror
 ```
 
-```{r fig13, fig.cap = "Plot 13", echo = FALSE, fig.align = 'center'}
+```{r fig13, fig.cap = "Symmetric Mean Percentage Error by Month of Selected Model ", echo = FALSE, fig.align = 'center'}
 plot_montherror
 ```
 
