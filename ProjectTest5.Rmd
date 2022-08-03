@@ -101,7 +101,7 @@ data %>%
     facet_wrap(. ~ Variable, scales = "free_x")
 ```
 
-The `evaluate` function below is for generating the data for Table 3.1 and the top half of Table 3.3. The `evaluate_power` function is for generating the the data for bottom half of Table 3.3. The `get_table` formats two tables. The `transformation_power` function is for generating the data for Table 3.2.
+The `evaluate` function below is for generating the data for Table 3.1 and the top half of Table 3.3. The `evaluate_power` function is for generating the the data for bottom half of Table 3.3. The `get_table` formats two tables. The `transformation_power` function is for generating the data for Table 3.2. The `get_R2_helper` function is based on sklearn.metrics.r2_score. https://scikit-learn.org/stable/modules/model_evaluation.html#r2-score
 
 ```{r, warning = FALSE}
 #Function to calculate LOOCV-RMSE
@@ -115,14 +115,18 @@ get_rmse = function(model, power = 1){
   n = length(pred)
   sqrt(1/n * sum((actual-pred)^2))
 }
+get_R2_helper = function(y, yhat){
+  ybar = mean(y)
+  1 - sum((y-yhat)^2)/sum((y-ybar)^2)
+}
 #Function to return R^2
-get_R2 = function(model){
-  cor(predict(model, bike_tst), bike_tst$RentedBikeCount)^2
+get_R2 = function(model, power = 1){
+  get_R2_helper(y = bike_tst$RentedBikeCount, yhat = predict(model, bike_tst)^power)
 }
 #Function to return Adjusted R^2
 get_R2_adj = function(model, power){
   factor = summary(model)$adj.r.squared/summary(model)$r.squared
-  cor(predict(model, bike_trn)^power, bike_trn$RentedBikeCount)^2
+  get_R2_helper(y = bike_trn$RentedBikeCount, yhat = predict(model, bike_trn)^power)
 }
 #Function to evaluate the list of models with metrics chosen
 evaluate = function(models, row_names){
@@ -143,7 +147,7 @@ evaluate_power = function(models, power = 0.5, row_names){
   loocv_rmse = sapply(models, get_loocv_rmse)
   bics_list = unlist(sapply(models, AIC, k = log(6132)))
   rmse_list = sapply(models, get_rmse, power = 1/power)
-  R2test_list = sapply(models, function(model) cor(predict(model, bike_tst)^(1/power), bike_tst$RentedBikeCount))^2
+  R2test_list = sapply(models, function(model) get_R2(model, power = 1/power))
   R2adj_list = sapply(models, get_R2_adj, power = 1/power)
   frame = cbind(num_coefs, loocv_rmse, bics_list, rmse_list, R2adj_list, R2test_list)
   colnames(frame) = c("Coefficients", "LOOCV-RMSE","BIC","Test RMSE","Adjusted R2","Test R2")
@@ -421,6 +425,28 @@ plot_CV2 = ggplot(res, aes(x = MAE_CV, y = MSE,  color = model)) +
 The Cross-Validation plot on Figure \@ref(fig:fig4) generally shows the selected model (manually) performs better than the BIC model with lower RMSE and MAE. The Figure \@ref(fig:fig5) shows however more variance in the selected model than the BIC model and one of the 10 folds often has high RMSE.
 
 
+```{r, warning = FALSE, message = FALSE}
+Actual_Test = bike_tst$RentedBikeCount
+metrics = sapply(list(predict(model_add, bike_tst), predict(bic_model, bike_tst),
+                      predict(bic_sqrt, bike_tst)^2, predict(best_model, bike_tst)^2), function(x){
+  rmse = Metrics::rmse(Actual_Test, x)
+  mae = Metrics::mae(Actual_Test, x)
+  bias = Metrics::bias(Actual_Test, x)
+  rae = Metrics::rae(Actual_Test, x)
+  mdae = Metrics::mdae(Actual_Test, x)
+  smape = Metrics::smape(Actual_Test, x)
+  R2 = get_R2_helper(Actual_Test, x)
+  c(rmse, mae,mdae, bias,rae,smape, R2)
+})
+rownames(metrics) = c("Root Mean Squared Error","Mean Absolute Error","Median Absolute Error","Bias",
+                      "Relative Absolute Error","Symmetric Mean Absolute Percentage Error", "Test R-Squared")
+colnames(metrics) = c("Additive Model (No Transform)", "BIC Model (No Transform)", "BIC Model (Sqrt Transform)", "Selected Model (Sqrt Transform)")
+table_metrics = kable(metrics, digits = 3, 
+                        caption = "Evaluation Metrics of Test Set of Models") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "bordered", "condensed", "responsive"))
+```
+
+
 ```{r, warning = FALSE}
 Predicted = predict(best_model, data)^2
 Actual = data$RentedBikeCount
@@ -477,7 +503,7 @@ plot_hour_seasonerror = ggplot(hour_seasonerror, aes(x = Hour, group = Season)) 
 
 ```
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 hourerror = data %>%
   group_by(Hour) %>%
   summarize(Error = 100 * Metrics::smape(RentedBikeCount, Predicted_BikeCount))
@@ -487,7 +513,7 @@ plot_hourerror = ggplot(hourerror, aes(x = Hour, y = Error)) +
   ggtitle("Symmetric mean absolute percentage error by hour of day")
 ```
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 montherror = data %>%
   group_by(Month) %>%
   summarize(Error = 100 * Metrics::smape(RentedBikeCount, Predicted_BikeCount))
@@ -544,6 +570,11 @@ plot_CV
 ```{r fig5, fig.cap = "Measuring Variance of Models using 10-fold Cross Validation", echo = FALSE, fig.align = 'center'}
 plot_CV2
 ```
+
+```{r tab4, echo = FALSE, fig.align = 'center'}
+table_metrics
+```
+
 
 Plot 7 shows that all the points are closer to the regressed diagonal line and follow the same trend as of the regression line giving us confidence in our predictions.
 
@@ -636,6 +667,11 @@ plot_CV
 ```{r fig5-echo, fig.cap = "Plot 5", eval = FALSE, fig.align = 'center'}
 plot_CV2
 ```
+
+```{r tab4-echo, echo = FALSE, eval = FALSE, fig.align = 'center'}
+table_metrics
+```
+
 
 ```{r fig6-echo, fig.cap = "Plot 6", eval = FALSE, fig.align = 'center'}
 plot_error
