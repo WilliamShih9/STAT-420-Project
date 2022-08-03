@@ -435,9 +435,7 @@ The Cross-Validation plot on Figure \@ref(fig:fig4) generally shows the selected
 
 
 ```{r, warning = FALSE}
-Predicted = predict(best_model, data)
-Predicted2 = ifelse(Predicted > 0, Predicted^2, -Predicted^2)
-Predicted3 = Predicted^2
+Predicted = predict(best_model, data)^2
 Actual = data$RentedBikeCount
 plot_timeline1 = ggplot(data.frame(Point = 1:50, Predicted = Predicted[1:50], Actual = Actual[1:50]), aes(x = Point)) +
   theme_bw() + ylab("Number of Rented Bikes") + xlab("Hour") +
