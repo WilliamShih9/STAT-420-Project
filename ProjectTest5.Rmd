@@ -454,7 +454,7 @@ plot_timeline1 = ggplot(data.frame(Point = 1:50, Predicted = Predicted[1:50], Ac
   theme_bw() + ylab("Number of Rented Bikes") + xlab("Hour") +
   geom_line(aes(y = Predicted, color = "Predicted"), size = 1) +
   geom_line(aes(y = Actual, color = "Actual"), size = 1) + ggtitle("Predicted vs Actual of Hours 1-50")
-plot_timeline2 = ggplot(data.frame(Point = 1:50, Predicted = Predicted[1001:1050], Actual = Actual[1001:1050]), aes(x = Point)) +
+plot_timeline2 = ggplot(data.frame(Point = 1001:1050, Predicted = Predicted[1001:1050], Actual = Actual[1001:1050]), aes(x = Point)) +
   theme_bw() + ylab("Number of Rented Bikes") + xlab("Hour") +
   geom_line(aes(y = Predicted, color = "Predicted"), size = 1) +
   geom_line(aes(y = Actual, color = "Actual"), size = 1) + ggtitle("Predicted vs Actual of Hours 1001-1050")
@@ -465,7 +465,7 @@ plot_timeline2 = ggplot(data.frame(Point = 1:50, Predicted = Predicted[1001:1050
 data$Predicted_BikeCount =  predict(best_model, data)^2
 data$Error = data$RentedBikeCount - data$Predicted_BikeCount
 plot_error = ggplot(data[-trn_idx, ], aes(x = RentedBikeCount, y = Error)) +
-  geom_point(alpha = 0.3) + 
+  geom_point(alpha = 0.3) + ylim(-1200,1200) +
   stat_smooth(method = "loess", formula = "y~x", se = FALSE) + xlab("Actual Bike Count") +
   theme_bw() + ggtitle("Actual Bike Count vs Error (Actual - Predicted)")
 plot_actual = ggplot(data[-trn_idx, ], aes(x = Predicted_BikeCount, y = RentedBikeCount)) +
@@ -584,7 +584,7 @@ plot_actual
 
 Plot 6 shows the Actuals Vs Errors plotted. Most of the points are densely packed in the lower error regions around 0.
 
-```{r fig6, fig.cap = "Actual Number of Rented Bikes vs Error of Test Set using Selected Model (Sqrt Transform)", echo = FALSE, fig.align = 'center'}
+```{r fig6, , warning = FALSE, message = FALSE, fig.cap = "Actual Number of Rented Bikes vs Error of Test Set using Selected Model (Sqrt Transform)", echo = FALSE, fig.align = 'center'}
 plot_error
 ```
 
