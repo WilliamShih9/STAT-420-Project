@@ -33,6 +33,13 @@ colnames = c("Date","RentedBikeCount","Hour","Temperature","Humidity","Wind","Vi
              "DewPoint","SolarRadiation","Rainfall","Snowfall","Season","Holiday","Functional")
 data = read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/00560/SeoulBikeData.csv",
                 col.names = colnames)
+
+day = substr(data$Date,1,2)
+month = substr(data$Date,4,5)
+Week = paste0(substr(data$Date, 7, 10), "-",month,"-",day)
+Week = weekdays(as.Date(Week))
+data$Weekend = ifelse(Week == "Saturday" | Week == "Sunday", 1, 0)
+
 data = tibble(data)
 #Separate 'Date'  into Day, Month and Year
 data = separate(data, "Date", c("Day", "Month", "Year"))
@@ -47,10 +54,12 @@ data$Year = as.integer(data$Year)
 data = dplyr::select(data, -Year)
 ```
 
-We investigated the data, particularly how predictors related to each other through collinearity.  Below is a correlation plot describing each.  Temperature and (to a lesser degree) Humidity both had high correlation to Dewpoint.
+Weekend is added as a new variable, derived from Date. The Weekend variable is set to true if the day of the week is Saturday or Sunday and set to false otherwise.
+
+We investigated the data, particularly how predictors related to each other through collinearity. Below is a correlation plot describing each.  Temperature and (to a lesser degree) Humidity both had high correlation to Dewpoint.
 
 ```{r fig-1, message = FALSE, warning = FALSE, fig.cap = "Correlation Plot of Continuous Variables", fig.align = 'center'}
-correlations = round(cor(data %>% select(-c(Day, Month, Season, Holiday, Functional))), 2)
+correlations = round(cor(data %>% select(-c(Day, Weekend, Month, Season, Holiday, Functional))), 2)
 cor_melt = reshape2::melt(correlations)
 ggplot(cor_melt, aes(x = Var1, y = Var2, fill = value)) +
   geom_tile() +
@@ -74,6 +83,8 @@ draw_plot = function(data){
     facet_wrap(xaxis ~ ., scales = "free_x")
 }
 draw_plot(data %>% select(RentedBikeCount, Hour, Day, Month))
+#Remove 'Day' as the plot shows it won't a useful predictor
+data = dplyr::select(data, -Day)
 ```
 
 ```{r fig-3, message = FALSE, warning = FALSE, fig.cap = "Number of Rented Bikes by Temperature/Humidity/Wind/Visilibty", fig.align = 'center'}
@@ -232,21 +243,22 @@ We began with several initial models - an multiple linear regressions (MLR) addi
 ```{r, message = FALSE, warning = FALSE, fig.height= 15, fig.width = 15}
 #Initial model starting points
 model_add = lm(RentedBikeCount ~ ., data = bike_trn)
-model_fact = lm(RentedBikeCount ~ . + factor(Hour), data = bike_trn)
-model_fact2 = lm(RentedBikeCount ~ . + factor(Hour) + (Temperature * .), data = bike_trn)
-model_fact3 = lm(RentedBikeCount ~ . + factor(Hour) + (Temperature * .) + (Hour*.), data = bike_trn)
-model_fact4 = lm(RentedBikeCount ~ . + factor(Hour) + (Temperature * .) + (Humidity*.) + (Hour*.), data = bike_trn)
-model_fact5 = lm(RentedBikeCount ~ (.)^2 + factor(Hour), data = bike_trn)
-continuous = c("Day","Hour","Temperature","Humidity","Wind","Visibility","DewPoint","SolarRadiation","Rainfall","Snowfall")
+model_fact0 = lm(RentedBikeCount ~ . + factor(Hour), data = bike_trn)
+model_fact1 = lm(RentedBikeCount ~ . + factor(Hour)*Weekend, data = bike_trn)
+model_fact2 = lm(RentedBikeCount ~ . + factor(Hour)*Weekend + (Temperature * .), data = bike_trn)
+model_fact3 = lm(RentedBikeCount ~ . + factor(Hour)*Weekend + (Temperature * .) + (Hour*.), data = bike_trn)
+model_fact4 = lm(RentedBikeCount ~ . + factor(Hour)*Weekend + (Temperature * .) + (Humidity*.) + (Hour*.), data = bike_trn)
+model_fact5 = lm(RentedBikeCount ~ (.)^2 + factor(Hour)*Weekend, data = bike_trn)
+continuous = c("Hour","Temperature","Humidity","Wind","Visibility","DewPoint","SolarRadiation","Rainfall","Snowfall")
 full_formula = as.formula(
     paste0('RentedBikeCount ~ (.)^2 + factor(Hour) + ', paste0('I(',continuous,'^2)*.',collapse = ' + ')))
-model_fact6 = lm(RentedBikeCount ~ (.)^2 + factor(Hour) + I(Temperature^2)*. + I(Wind^2)*., data = bike_trn)
+model_fact6 = lm(RentedBikeCount ~ (.)^2 + factor(Hour)*Weekend + I(Temperature^2)*. + I(Wind^2)*., data = bike_trn)
 model_full = lm(full_formula, data = bike_trn)
-models = list(model_add, model_fact, model_fact2, model_fact3, model_fact4, model_fact5, model_fact6, model_full)
+models = list(model_add, model_fact0, model_fact1, model_fact2, model_fact3, model_fact4, model_fact5, model_fact6, model_full)
 ```
 
 ```{r, warning = FALSE}
-frame = evaluate(models, row_names = c("Additive","Hour as Factor","Interaction with Temp",
+frame = evaluate(models, row_names = c("Additive","Hour as Factor","Hour*Weekend as Factor", "Interaction with Temp",
                     "Interaction with Temp,Hour","Interaction with Temp,Humidity,Hour",
                     "All Interaction", "All Interaction (Quadratic for Wind/Temp)", "All Interaction with Quadratics"))
 table_eval1 = get_table(frame, title = "Evaluation of Initial Models")
@@ -259,33 +271,52 @@ Once we selected the initial model we liked best based on the metrics above, we 
 #bic_model = step(model_fact6, span = RentedBikeCount ~ 1, direction = "backward", k = log(trn_size), trace = 0)
 #aic_formula = aic_model$terms
 #bic_formula = bic_model$terms
-aic_formula = formula(RentedBikeCount ~ . + factor(Hour) + I(Temperature^2) + I(Wind^2) +
-    Day:(Month+Humidity+Wind+Visibility+SolarRadiation+Season+Holiday)+
-    Month:(Temperature+Visibility+DewPoint+SolarRadiation+Season+Holiday+Functional)+
-    Hour:(Temperature+Humidity+Wind+Visibility+DewPoint+SolarRadiation+Rainfall+
-    Snowfall+Season+Holiday+Functional)+
-    Temperature:(Wind+Visibility+DewPoint+SolarRadiation+Rainfall+Season)+
-    Humidity:(Wind+Visibility+DewPoint+SolarRadiation+Rainfall+Season+Holiday+Functional)+
-    Wind:(Visibility+DewPoint+SolarRadiation+Season)+
-    Visibility:(DewPoint+SolarRadiation)+
-    DewPoint:(SolarRadiation+Rainfall+Season+Functional)+
-    SolarRadiation:(Season+Functional)+
-    Rainfall:(Snowfall+Season)+
-    Season:(Holiday+Functional)+ Holiday:Functional+
-    I(Temperature^2):(Day+Month+Wind+DewPoint+Rainfall+Season+Holiday)+
-    I(Wind^2):(Hour+Temperature+Humidity+Wind+Visibility+DewPoint+Rainfall+Snowfall+Season))
-bic_formula = formula(RentedBikeCount ~  Day + Month + Hour + Temperature + Humidity + Wind + 
-  Visibility + DewPoint + SolarRadiation + Rainfall + Snowfall + Season + Holiday + Functional +   
-  factor(Hour) + I(Temperature^2) + I(Wind^2) +
-  Day:Holiday + Month:(Temperature+DewPoint+Season+Holiday)+
-  Hour:(Temperature+Humidity+Wind+DewPoint+SolarRadiation+Rainfall+Holiday+Functional)+
-  Temperature:(Visibility+DewPoint+Rainfall+Season)+
-  Humidity:(Visibility+DewPoint+SolarRadiation+Season+Functional)+
-  Wind:(SolarRadiation+Rainfall+Season)+ Visibility:DewPoint + 
-  DewPoint:(SolarRadiation+Rainfall+Season+Functional)+
-  SolarRadiation:Functional + Rainfall:Snowfall + Season:Holiday +
-  I(Temperature^2):(Day+Month+DewPoint+Rainfall+Season+Holiday)+
-  I(Wind^2):(Hour + Season))
+aic_formula = formula(RentedBikeCount ~ Month + Hour + Temperature + Humidity + Wind + 
+  Visibility + DewPoint + SolarRadiation + Rainfall + Snowfall + 
+  Season + Holiday + Functional + Weekend + factor(Hour) + 
+  I(Temperature^2) + I(Wind^2) + Month:Temperature + Month:DewPoint + 
+  Month:SolarRadiation + Month:Rainfall + Month:Season + Month:Functional + 
+  Hour:Temperature + Hour:Humidity + Hour:Wind + Hour:Visibility + 
+  Hour:DewPoint + Hour:SolarRadiation + Hour:Rainfall + Hour:Snowfall + 
+  Hour:Season + Hour:Holiday + Hour:Functional + Temperature:Wind + 
+  Temperature:Visibility + Temperature:DewPoint + Temperature:Rainfall + 
+  Temperature:Season + Temperature:Holiday + Temperature:Weekend + 
+  Humidity:Wind + Humidity:Visibility + Humidity:DewPoint + 
+  Humidity:SolarRadiation + Humidity:Rainfall + Humidity:Season + 
+  Humidity:Functional + Humidity:Weekend + Wind:Visibility + 
+  Wind:DewPoint + Wind:SolarRadiation + Wind:Season + Wind:Holiday + 
+  Wind:Weekend + Visibility:DewPoint + Visibility:SolarRadiation + 
+  DewPoint:SolarRadiation + DewPoint:Rainfall + DewPoint:Season + 
+  DewPoint:Holiday + DewPoint:Functional + DewPoint:Weekend + 
+  SolarRadiation:Rainfall + SolarRadiation:Season + SolarRadiation:Holiday + 
+  SolarRadiation:Functional + SolarRadiation:Weekend + Rainfall:Snowfall + 
+  Rainfall:Season + Rainfall:Holiday + Rainfall:Weekend + Season:Holiday + 
+  Season:Functional + Holiday:Functional + Functional:Weekend + 
+  Weekend:factor(Hour) + Month:I(Temperature^2) + DewPoint:I(Temperature^2) + 
+  Rainfall:I(Temperature^2) + Season:I(Temperature^2) + Holiday:I(Temperature^2) + 
+  Hour:I(Wind^2) + Wind:I(Wind^2) + Visibility:I(Wind^2) + 
+  Rainfall:I(Wind^2) + Snowfall:I(Wind^2) + Season:I(Wind^2) + 
+  Holiday:I(Wind^2) + Weekend:I(Wind^2))
+bic_formula = formula(RentedBikeCount ~ Month + Hour + Temperature + Humidity + Wind + 
+                        Visibility + DewPoint + SolarRadiation + Rainfall + Snowfall + 
+                        Season + Holiday + Functional + Weekend + factor(Hour) + 
+                        I(Temperature^2) + I(Wind^2) + Month:Hour + Month:Temperature + 
+                        Month:SolarRadiation + Month:Season + Month:Functional + 
+                        Hour:Temperature + Hour:Humidity + Hour:Wind + Hour:DewPoint + 
+                        Hour:SolarRadiation + Hour:Rainfall + Hour:Holiday + Hour:Functional + 
+                        Temperature:Wind + Temperature:Visibility + Temperature:DewPoint + 
+                        Temperature:Rainfall + Temperature:Season + Temperature:Weekend + 
+                        Humidity:Wind + Humidity:Visibility + Humidity:DewPoint + 
+                        Humidity:SolarRadiation + Humidity:Season + Humidity:Functional + 
+                        Humidity:Weekend + Wind:Visibility + Wind:DewPoint + Wind:SolarRadiation + 
+                        Wind:Rainfall + Wind:Season + Visibility:DewPoint + DewPoint:SolarRadiation + 
+                        DewPoint:Rainfall + DewPoint:Season + DewPoint:Functional + 
+                        DewPoint:Weekend + SolarRadiation:Season + SolarRadiation:Functional + 
+                        SolarRadiation:Weekend + Rainfall:Snowfall + Season:Holiday + 
+                        Season:Functional + Holiday:Functional + Weekend:factor(Hour) + 
+                        Month:I(Temperature^2) + DewPoint:I(Temperature^2) + Rainfall:I(Temperature^2) + 
+                        Season:I(Temperature^2) + Holiday:I(Temperature^2) + Hour:I(Wind^2) + 
+                        Visibility:I(Wind^2) + Season:I(Wind^2))
 aic_model = lm(aic_formula, data = bike_trn)
 bic_model = lm(bic_formula, data = bike_trn)
 ```
@@ -334,11 +365,13 @@ The `bic_sqrt` model has the same exact parameters as the model selected from ba
 The best model `best_model` below was found manually after removing some parameters that not logical to be there from the `bic_sqrt_full` model and is between the `bic_sqrt` and `bic_sqrt_full` model in complexity and number of parameters.
 
 ```{r, warning = FALSE, message = FALSE}
-bic_sqrt_full = lm(sqrt(RentedBikeCount) ~ (.)^2 + factor(Hour) + I(Day^2) * . + 
+bic_sqrt_full = lm(sqrt(RentedBikeCount) ~ (.)^2 + factor(Hour)*Weekend + 
     I(Hour^2) * . + I(Temperature^2) * . + I(Humidity^2) * . + 
     I(Wind^2) * . + I(Visibility^2) * . + I(DewPoint^2) * . + 
-    I(SolarRadiation^2) * . + I(Rainfall^2) * . + I(Snowfall^2) * ., data = bike_trn)
-best_formula = formula(sqrt(RentedBikeCount) ~ .-Day + factor(Hour) + 
+    I(SolarRadiation^2) * . + I(Rainfall^2) * . + I(Snowfall^2) * . , data = bike_trn)
+
+#best = step(bic_sqrt_full, span = RentedBikeCount ~ 1, direction = "backward", k = log(trn_size), trace = 0)
+best_formula = formula(sqrt(RentedBikeCount) ~ . + factor(Hour)*Weekend + 
       I(Temperature^2) + I(Humidity^2) + I(Wind^2) + 
       I(Visibility^2) + I(DewPoint^2) + I(SolarRadiation^2) + I(Rainfall^2) + 
       I(Snowfall^2) + Month:(Season + Holiday) +
@@ -379,10 +412,10 @@ cv_bic = lapply(cv_evaluate,function(model){
   temp = cv.lm(data.frame(bike_trn), model, m = kfold, 
                seed = 40, printit = FALSE, plotit = FALSE)
   if (length(temp) == 19){
-    dat = cbind(temp[3], temp[17]^2, temp[18]^2, temp[19])
+    dat = cbind(temp[2], temp[17]^2, temp[18]^2, temp[19])
   }
   else if (length(temp) == 18){
-    dat = cbind(temp[3],temp[16], temp[17], temp[18])
+    dat = cbind(temp[2],temp[16], temp[17], temp[18])
   }
   names(dat) = c("actual","predicted","cvpred","fold")
   dat
@@ -400,8 +433,8 @@ res["model"] = c(rep("Additive (No Transform)", kfold),
                  rep("BIC Model (Sqrt Transform)", kfold),
                  rep("Selected Model (Sqrt Transform)", kfold))
 plot_CV = ggplot(res, aes(x = MAE, y = MSE,  color = model)) +
-  geom_point(size = 2) + theme_bw() + xlab("Mean Absolute Error") +
-  ylab("Root Mean Squared Error") + xlim(100, 350) + ylim(200, 500) +
+  geom_point(size = 3) + theme_bw() + xlab("Mean Absolute Error") +
+  ylab("Root Mean Squared Error") + ylim(0, 500) + xlim(0, 350) +
   ggtitle("MAE and RMSE of 10-fold Cross-Validation of Select Models")
 plot_CV2 = ggplot(res, aes(x = MAE_CV, y = MSE,  color = model)) +
   geom_point(size = 3) + theme_bw() + xlab("Average Absolute Difference Between Cross-Validation Prediction\nand Prediction Using Entire Training Set") +
@@ -510,6 +543,8 @@ plot_montherror = ggplot(montherror, aes(x = factor(Month), y = Error)) +
 ```
 
 
+
+
 # Results
 
 Table 3.1 below shows how the initial models performed on the Test set. The larger models will almost always have a larger R2 value and this is evident from the table. The 'All Interaction with Quadratics' model with 327 coefficients has the highest adjusted R2. We chose the 'All Interaction (Quadratic for Wind/Temp)' model with 191 parameters as the best initial model as it is a less complex model than the largest model and it performed well on all the evaluation metrics on the Test set.
@@ -525,7 +560,7 @@ Figure \@ref(fig:fig1) shows the diagnostics for the best model(BIC model with 9
 grid.draw(plot_diag1)
 ```
 
-From the Table 3.2 below it is evident that the square root transformation performed the best on the test set with adjusted R2 of 0.858
+From the Table 3.2 below it is evident that the square root transformation performed the best on the test set with adjusted R2 of 0.902.
 
 ```{r tab2, echo = FALSE, fig.align = 'center'}
 table_transform
