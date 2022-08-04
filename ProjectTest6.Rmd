@@ -539,7 +539,7 @@ Table 3.1 below shows how the initial models performed on the Test set. The larg
 table_eval1
 ```
 
-Figure \@ref(fig:fig1) shows the diagnostics for the best model(BIC model with 99 parameters) chosen by running the 'All Interaction (Quadratic for Wind/Temp)' model with 214 parameters through backward AIC and BIC procedures. The Fitted Vs Residual plot shows that the constant variance assumption is violated and the Q-Q plot also shows fat tails meaning there is more data located at the extremes. We wanted to check if a transformation of the response variable can fix this. 
+Figure \@ref(fig:fig1) shows the diagnostics for the best model (BIC model with 137 parameters) chosen by running the 'All Interaction (Quadratic for Wind/Temp)' model with 214 parameters through backward AIC and BIC procedures. The Fitted Vs Residual plot shows that the constant variance assumption is violated and the Q-Q plot also shows fat tails meaning there is more data located at the extremes. We wanted to check if a transformation of the response variable can fix this. 
 
 
 ```{r fig1, fig.cap = "Fitted vs Residuals and Q-Q Plot for BIC Model with no Transform", echo = FALSE, fig.align = 'center'}
