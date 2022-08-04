@@ -556,17 +556,19 @@ table_transform
 plot_boxcox
 ```
 
+Table 3.3 below shows the error metrics on the Test set for different models. The BIC of the best model chosen previously greatly reduced after applying a square root transform of the response variable. The square root transform model with manually selection, lets call this the Selected Model(Sqrt Transform), of predictors emerged as the best model with the least error LOOCV-RMSE and least BIC
+
+```{r tab3, echo = FALSE, fig.align = 'center'}
+table_eval2
+```
+
 The Fitted Vs Residuals plot in Figure \@ref(fig:fig3) for the selected model with square root transformation of the response variable shows close to constant variance compared to the model without transforming the response variable and there is no great improvement in the Q-Q plot as it still shows fat tails
 
 ```{r fig3, fig.cap = "Fitted vs Residuals and Q-Q Plot for Selected Model with Sqrt Transform", echo = FALSE, fig.align = 'center'}
 grid.draw(plot_diag2)
 ```
 
-Table 3.3 below shows the error metrics on the Test set for different models. The BIC of the best model chosen previously greatly reduced after applying a square root transform of the response variable. The square root transform model with manually selection, lets call this the Selected Model(Sqrt Transform), of predictors emerged as the best model with the least error LOOCV-RMSE and least BIC
 
-```{r tab3, echo = FALSE, fig.align = 'center'}
-table_eval2
-```
 
 Figure \@ref(fig:fig4) and Figure \@ref(fig:fig5) show the MAE and RMSE values of the 10 fold Cross Validation of the selected models. It is evident that the Selected Model with square root transform performed the best with the least MAE and RMSE errors.
 
@@ -656,14 +658,13 @@ table_transform
 plot_boxcox
 ```
 
-
-```{r fig3-echo, fig.cap = "Plot 3", eval = FALSE, fig.align = 'center'}
-grid.draw(plot_diag2)
+```{r tab3-echo, eval = FALSE, fig.align = 'center'}
+table_eval2
 ```
 
 
-```{r tab3-echo, eval = FALSE, fig.align = 'center'}
-table_eval2
+```{r fig3-echo, fig.cap = "Plot 3", eval = FALSE, fig.align = 'center'}
+grid.draw(plot_diag2)
 ```
 
 ```{r fig4-echo, fig.cap = "Plot 4", eval = FALSE, fig.align = 'center'}
