@@ -378,7 +378,7 @@ frame2 = evaluate(models, row_names = c("All Interaction", "AIC Model", "BIC Mod
 frame3 = rbind(frame2, frame2_sqrt)
 rownames(frame3) = c("All Interaction (Linear)", "AIC Model (Linear)", "BIC Model (Linear)","BIC Model (Sqrt Transform)", "Selected Model (Sqrt Transform)", "Full Model (Sqrt Transform)") 
 table_eval2 = get_table(frame3, title = "Evaluation of Models (LOOCV-RMSE/BIC of Transformed vs Non-Transformed Not Comparable)")
-plot_diag2 = plot_diagnostics(best_model, "BIC Model with Transform")
+plot_diag2 = plot_diagnostics(best_model, "Selected Model with Sqrt Transform")
 ```
 
 We try 10-fold cross-validation to measure how much better the selected model is compared to the model chosen by BIC and the naive additive model.
@@ -556,9 +556,9 @@ table_transform
 plot_boxcox
 ```
 
-The Fitted Vs Residuals plot in Figure \@ref(fig:fig3)for the best bic model with square root transform still does not show equal variance and there is no great improvement in the Q-Q plot as it still shows fat tails
+The Fitted Vs Residuals plot in Figure \@ref(fig:fig3) for the selected model with square root transformation of the response variable shows close to constant variance compared to the model without transforming the response variable and there is no great improvement in the Q-Q plot as it still shows fat tails
 
-```{r fig3, fig.cap = "Fitted vs Residuals and Q-Q Plot for BIC Model with Sqrt Transform", echo = FALSE, fig.align = 'center'}
+```{r fig3, fig.cap = "Fitted vs Residuals and Q-Q Plot for Selected Model with Sqrt Transform", echo = FALSE, fig.align = 'center'}
 grid.draw(plot_diag2)
 ```
 
