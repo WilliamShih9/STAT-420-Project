@@ -38,7 +38,6 @@ day = substr(data$Date,1,2)
 month = substr(data$Date,4,5)
 Week = paste0(substr(data$Date, 7, 10), "-",month,"-",day)
 Week = weekdays(as.Date(Week))
-data$Weekend = ifelse(Week == "Saturday" | Week == "Sunday", 1, 0)
 
 data = tibble(data)
 #Separate 'Date'  into Day, Month and Year
@@ -54,12 +53,10 @@ data$Year = as.integer(data$Year)
 data = dplyr::select(data, -Year)
 ```
 
-Weekend is added as a new variable, derived from Date. The Weekend variable is set to true if the day of the week is Saturday or Sunday and set to false otherwise.
-
 We investigated the data, particularly how predictors related to each other through collinearity. Below is a correlation plot describing each.  Temperature and (to a lesser degree) Humidity both had high correlation to Dewpoint.
 
 ```{r fig-1, message = FALSE, warning = FALSE, fig.cap = "Correlation Plot of Continuous Variables", fig.align = 'center'}
-correlations = round(cor(data %>% select(-c(Day, Weekend, Month, Season, Holiday, Functional))), 2)
+correlations = round(cor(data %>% select(-c(Day, Month, Season, Holiday, Functional))), 2)
 cor_melt = reshape2::melt(correlations)
 ggplot(cor_melt, aes(x = Var1, y = Var2, fill = value)) +
   geom_tile() +
@@ -106,6 +103,16 @@ data %>%
     geom_boxplot() + ylab("Number of Rented Bikes") +
     facet_wrap(. ~ Variable, scales = "free_x")
 ```
+```{r fig-6, message = FALSE, warning = FALSE, fig.cap = "Number of Rented Bikes by Hour of Day and Day of Week", fig.align = 'center'}
+bikeperweekdayhour = data.frame(Bike = data$RentedBikeCount, Hour = data$Hour, Weekday = Week) %>%
+  group_by(Hour, Weekday) %>%
+  summarize(Count = mean(Bike))
+ggplot(bikeperweekdayhour, aes(x = Hour, y = Count, group = Weekday, color = Weekday)) + 
+  ylab("Number of Rented Bikes") + geom_line(size = 1) + geom_point() + theme_bw() + 
+  ggtitle("Number of Rented Bikes by Hour of Day and Day of Week")
+# Add Weekend as a new variable as number of rented bikes varies depending on whether it is Saturday/Sunday vs the other 5 days
+data$Weekend = as.factor(ifelse(Week == "Saturday" | Week == "Sunday", 1, 0))
+```
 
 The `evaluate` function below is for generating the data for Table 3.1 and the top half of Table 3.3. The `evaluate_power` function is for generating the the data for bottom half of Table 3.3. The `get_table` formats two tables. The `transformation_power` function is for generating the data for Table 3.2. The `get_R2_helper` function is based on sklearn.metrics.r2_score. https://scikit-learn.org/stable/modules/model_evaluation.html#r2-score
 
@@ -147,7 +154,7 @@ evaluate = function(models, row_names){
   rownames(frame) = row_names
   return(frame)
 }
-#Function to evaluate the list of models with metrics chosen with given power
+#Function to evaluate the list of models with metrics chosen with given power transformation to y
 evaluate_power = function(models, power = 0.5, row_names){
   num_coefs = sapply(models, function(x) length(coef(x)))
   loocv_rmse = sapply(models, get_loocv_rmse)
@@ -190,6 +197,7 @@ plot_diagnostics = function(model, title){
       ggtitle(paste("Normal Q-Q Plot for\n",title))
     arrangeGrob(plot1, plot2, nrow = 1, ncol = 2)
 }
+# Function to find Model Metrics in original data units given a power transformation to y
 transformation_power = function(pow, form, offset){
   actual_test = bike_tst$RentedBikeCount
   train = bike_trn
@@ -369,8 +377,6 @@ bic_sqrt_full = lm(sqrt(RentedBikeCount) ~ (.)^2 + factor(Hour)*Weekend +
     I(Hour^2) * . + I(Temperature^2) * . + I(Humidity^2) * . + 
     I(Wind^2) * . + I(Visibility^2) * . + I(DewPoint^2) * . + 
     I(SolarRadiation^2) * . + I(Rainfall^2) * . + I(Snowfall^2) * . , data = bike_trn)
-
-#best = step(bic_sqrt_full, span = RentedBikeCount ~ 1, direction = "backward", k = log(trn_size), trace = 0)
 best_formula = formula(sqrt(RentedBikeCount) ~ . + factor(Hour)*Weekend + 
       I(Temperature^2) + I(Humidity^2) + I(Wind^2) + 
       I(Visibility^2) + I(DewPoint^2) + I(SolarRadiation^2) + I(Rainfall^2) + 
@@ -433,7 +439,7 @@ res["model"] = c(rep("Additive (No Transform)", kfold),
                  rep("BIC Model (Sqrt Transform)", kfold),
                  rep("Selected Model (Sqrt Transform)", kfold))
 plot_CV = ggplot(res, aes(x = MAE, y = MSE,  color = model)) +
-  geom_point(size = 3) + theme_bw() + xlab("Mean Absolute Error") +
+  geom_point(size = 2.5) + theme_bw() + xlab("Mean Absolute Error") +
   ylab("Root Mean Squared Error") + ylim(0, 500) + xlim(0, 350) +
   ggtitle("MAE and RMSE of 10-fold Cross-Validation of Select Models")
 plot_CV2 = ggplot(res, aes(x = MAE_CV, y = MSE,  color = model)) +
@@ -458,10 +464,16 @@ metrics = sapply(list(predict(model_add, bike_tst), predict(bic_model, bike_tst)
   R2 = get_R2_helper(Actual_Test, x)
   c(rmse, mae,mdae, bias,rae,smape, R2)
 })
+metrics = data.frame(t(metrics))
+metrics <- mapply(  # Iterate over each column
+  function(df, digits) { formatC(df, format="f", digits=digits) },
+  df=metrics, digits=c(1, 1, 1, 1, 3, 3, 3)
+)
+metrics <- data.frame(t(metrics))  # Transpose back
 rownames(metrics) = c("Root Mean Squared Error","Mean Absolute Error","Median Absolute Error","Bias",
                       "Relative Absolute Error","Symmetric Mean Absolute Percentage Error", "Test R-Squared")
 colnames(metrics) = c("Additive Model (No Transform)", "BIC Model (No Transform)", "BIC Model (Sqrt Transform)", "Selected Model (Sqrt Transform)")
-table_metrics = kable(metrics, digits = 3, 
+table_metrics = kable(metrics,  
                         caption = "Evaluation Metrics of Test Set of Models") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "bordered", "condensed", "responsive"))
 ```
