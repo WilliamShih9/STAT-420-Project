@@ -533,30 +533,31 @@ plot_montherror = ggplot(montherror, aes(x = factor(Month), y = Error)) +
 
 # Results
 
-Table 3.1 below shows how the initial models performed on the Test set. The larger models will almost always have a larger R2 value and this is evident from the table. The 'All Interaction with Quadratics' model with 327 coefficients has the highest adjusted R2. We chose the 'All Interaction (Quadratic for Wind/Temp)' model with 191 parameters as the best initial model as it is a less complex model than the largest model and it performed well on all the evaluation metrics on the Test set.
+Table 3.1 below shows how the initial models performed on the Test set. The larger models will almost always have a larger adjusted $R^{2}$ value despite the adjustment penalty and this is evident from the table. The 'All Interaction with Quadratics' model with 310 coefficients has the highest adjusted $R^{2}$. We chose the 'All Interaction (Quadratic for Wind/Temp)' model with 214 parameters as the best initial model as it is a less complex model than the largest model and it performed well on all the evaluation metrics on the Test set.
 
 ```{r tab1, echo = FALSE, fig.align = 'center'}
 table_eval1
 ```
 
-Figure \@ref(fig:fig1) shows the diagnostics for the best model(BIC model with 99 parameters) chosen by running the 'All Interaction (Quadratic for Wind/Temp)' model with 191 parameters through backward AIC and BIC procedures. The Fitted Vs Residual plot shows that the constant variance assumption is violated and the Q-Q plot also shows fat tails meaning there is more data located at the extremes. We wanted to check if a transformation of the response variable can fix this. 
+Figure \@ref(fig:fig1) shows the diagnostics for the best model(BIC model with 99 parameters) chosen by running the 'All Interaction (Quadratic for Wind/Temp)' model with 214 parameters through backward AIC and BIC procedures. The Fitted Vs Residual plot shows that the constant variance assumption is violated and the Q-Q plot also shows fat tails meaning there is more data located at the extremes. We wanted to check if a transformation of the response variable can fix this. 
 
 
 ```{r fig1, fig.cap = "Fitted vs Residuals and Q-Q Plot for BIC Model with no Transform", echo = FALSE, fig.align = 'center'}
 grid.draw(plot_diag1)
 ```
 
-From the Table 3.2 below it is evident that the square root transformation performed the best on the test set with adjusted R2 of 0.902.
+From the Table 3.2 below it is evident that the square root transformation performed the best on the test set with adjusted $R^{2}$ of 0.902 and RMSE of 211.3.
 
 ```{r tab2, echo = FALSE, fig.align = 'center'}
 table_transform
 ```
 
+
 ```{r fig2, fig.cap = "Box-Cox Plot from BIC Model with no Transform", echo = FALSE, fig.align = 'center'}
 plot_boxcox
 ```
 
-Table 3.3 below shows the error metrics on the Test set for different models. The BIC of the best model chosen previously greatly reduced after applying a square root transform of the response variable. The square root transform model with manually selection, lets call this the Selected Model(Sqrt Transform), of predictors emerged as the best model with the least error LOOCV-RMSE and least BIC
+Table 3.3 below shows the error metrics on the Test set for different models. The square root transform model with manually selection, lets call this the Selected Model (Sqrt Transform), of predictors emerged as the best model with the least error LOOCV-RMSE and least BIC
 
 ```{r tab3, echo = FALSE, fig.align = 'center'}
 table_eval2
