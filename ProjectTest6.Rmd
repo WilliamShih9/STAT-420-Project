@@ -279,52 +279,29 @@ Once we selected the initial model we liked best based on the metrics above, we 
 #bic_model = step(model_fact6, span = RentedBikeCount ~ 1, direction = "backward", k = log(trn_size), trace = 0)
 #aic_formula = aic_model$terms
 #bic_formula = bic_model$terms
-aic_formula = formula(RentedBikeCount ~ Month + Hour + Temperature + Humidity + Wind + 
-  Visibility + DewPoint + SolarRadiation + Rainfall + Snowfall + 
-  Season + Holiday + Functional + Weekend + factor(Hour) + 
-  I(Temperature^2) + I(Wind^2) + Month:Temperature + Month:DewPoint + 
-  Month:SolarRadiation + Month:Rainfall + Month:Season + Month:Functional + 
-  Hour:Temperature + Hour:Humidity + Hour:Wind + Hour:Visibility + 
-  Hour:DewPoint + Hour:SolarRadiation + Hour:Rainfall + Hour:Snowfall + 
-  Hour:Season + Hour:Holiday + Hour:Functional + Temperature:Wind + 
-  Temperature:Visibility + Temperature:DewPoint + Temperature:Rainfall + 
-  Temperature:Season + Temperature:Holiday + Temperature:Weekend + 
-  Humidity:Wind + Humidity:Visibility + Humidity:DewPoint + 
-  Humidity:SolarRadiation + Humidity:Rainfall + Humidity:Season + 
-  Humidity:Functional + Humidity:Weekend + Wind:Visibility + 
-  Wind:DewPoint + Wind:SolarRadiation + Wind:Season + Wind:Holiday + 
-  Wind:Weekend + Visibility:DewPoint + Visibility:SolarRadiation + 
-  DewPoint:SolarRadiation + DewPoint:Rainfall + DewPoint:Season + 
-  DewPoint:Holiday + DewPoint:Functional + DewPoint:Weekend + 
-  SolarRadiation:Rainfall + SolarRadiation:Season + SolarRadiation:Holiday + 
-  SolarRadiation:Functional + SolarRadiation:Weekend + Rainfall:Snowfall + 
-  Rainfall:Season + Rainfall:Holiday + Rainfall:Weekend + Season:Holiday + 
-  Season:Functional + Holiday:Functional + Functional:Weekend + 
-  Weekend:factor(Hour) + Month:I(Temperature^2) + DewPoint:I(Temperature^2) + 
-  Rainfall:I(Temperature^2) + Season:I(Temperature^2) + Holiday:I(Temperature^2) + 
-  Hour:I(Wind^2) + Wind:I(Wind^2) + Visibility:I(Wind^2) + 
-  Rainfall:I(Wind^2) + Snowfall:I(Wind^2) + Season:I(Wind^2) + 
-  Holiday:I(Wind^2) + Weekend:I(Wind^2))
-bic_formula = formula(RentedBikeCount ~ Month + Hour + Temperature + Humidity + Wind + 
-                        Visibility + DewPoint + SolarRadiation + Rainfall + Snowfall + 
-                        Season + Holiday + Functional + Weekend + factor(Hour) + 
-                        I(Temperature^2) + I(Wind^2) + Month:Hour + Month:Temperature + 
-                        Month:SolarRadiation + Month:Season + Month:Functional + 
-                        Hour:Temperature + Hour:Humidity + Hour:Wind + Hour:DewPoint + 
-                        Hour:SolarRadiation + Hour:Rainfall + Hour:Holiday + Hour:Functional + 
-                        Temperature:Wind + Temperature:Visibility + Temperature:DewPoint + 
-                        Temperature:Rainfall + Temperature:Season + Temperature:Weekend + 
-                        Humidity:Wind + Humidity:Visibility + Humidity:DewPoint + 
-                        Humidity:SolarRadiation + Humidity:Season + Humidity:Functional + 
-                        Humidity:Weekend + Wind:Visibility + Wind:DewPoint + Wind:SolarRadiation + 
-                        Wind:Rainfall + Wind:Season + Visibility:DewPoint + DewPoint:SolarRadiation + 
-                        DewPoint:Rainfall + DewPoint:Season + DewPoint:Functional + 
-                        DewPoint:Weekend + SolarRadiation:Season + SolarRadiation:Functional + 
-                        SolarRadiation:Weekend + Rainfall:Snowfall + Season:Holiday + 
-                        Season:Functional + Holiday:Functional + Weekend:factor(Hour) + 
-                        Month:I(Temperature^2) + DewPoint:I(Temperature^2) + Rainfall:I(Temperature^2) + 
-                        Season:I(Temperature^2) + Holiday:I(Temperature^2) + Hour:I(Wind^2) + 
-                        Visibility:I(Wind^2) + Season:I(Wind^2))
+
+aic_formula = formula(RentedBikeCount ~ . + factor(Hour)*Weekend + I(Temperature^2) + I(Wind^2) +
+  Month:(Temperature+DewPoint+SolarRadiation+Rainfall+Season+Functional)+
+  Hour:(Temperature+Humidity+Wind+Visibility+DewPoint+SolarRadiation+Rainfall+Snowfall+Season+Holiday+Functional)+
+  Temperature:(Wind+Visibility+DewPoint+Rainfall+Season+Holiday+Weekend)+
+  Humidity:(Wind+Visibility+DewPoint+SolarRadiation+Rainfall+Season+Functional+Weekend)+
+  Wind:(Visibility+DewPoint + SolarRadiation + Season + Holiday + Weekend) + Visibility:(DewPoint + SolarRadiation) +
+  DewPoint:(SolarRadiation + Rainfall + Season + Holiday + Functional + Weekend) +
+  SolarRadiation:(Rainfall + Season + Holiday + Functional + Weekend) +
+  Rainfall:(Snowfall + Season + Holiday + Weekend) +
+  Season:(Holiday + Functional) + Holiday:Functional + Functional:Weekend +
+  I(Temperature^2):(Month + DewPoint + Rainfall + Season + Holiday) +
+  I(Wind^2):(Hour+Wind+Visibility+Rainfall+Snowfall+Season +Holiday+ Weekend))
+bic_formula = formula(RentedBikeCount ~ Month+Hour+Temperature+Humidity+Wind+Visibility+DewPoint+SolarRadiation + 
+  Rainfall + Snowfall + Season + Holiday + Functional + Weekend + factor(Hour)*Weekend + I(Temperature^2) + I(Wind^2) +
+  Month:(Hour+Temperature+SolarRadiation+Functional+Season)+
+  Hour:(Temperature+Humidity+Wind+DewPoint+SolarRadiation+Rainfall+Holiday+Functional)+
+  Temperature:(Wind+Visibility+DewPoint+Rainfall+Season+Weekend)+
+  Humidity:(SolarRadiation+Functional+Wind+Visibility+DewPoint+Season+Weekend)+
+  Wind:(Visibility+DewPoint + SolarRadiation + Rainfall +Season) +
+  Visibility:DewPoint + DewPoint:(SolarRadiation + Rainfall + Season + Functional + Weekend) +
+  SolarRadiation:(Season + Functional + Weekend) + Rainfall:Snowfall + Season:(Functional+Holiday) + Holiday:Functional + 
+  I(Temperature^2):(Month + DewPoint + Rainfall + Season + Holiday) + I(Wind^2):(Hour+Visibility+Season))
 aic_model = lm(aic_formula, data = bike_trn)
 bic_model = lm(bic_formula, data = bike_trn)
 ```
@@ -374,28 +351,25 @@ The best model `best_model` below was found manually after removing some paramet
 
 ```{r, warning = FALSE, message = FALSE}
 bic_sqrt_full = lm(sqrt(RentedBikeCount) ~ (.)^2 + factor(Hour)*Weekend + 
-    I(Hour^2) * . + I(Temperature^2) * . + I(Humidity^2) * . + 
-    I(Wind^2) * . + I(Visibility^2) * . + I(DewPoint^2) * . + 
-    I(SolarRadiation^2) * . + I(Rainfall^2) * . + I(Snowfall^2) * . , data = bike_trn)
-best_formula = formula(sqrt(RentedBikeCount) ~ . + factor(Hour)*Weekend + 
-      I(Temperature^2) + I(Humidity^2) + I(Wind^2) + 
-      I(Visibility^2) + I(DewPoint^2) + I(SolarRadiation^2) + I(Rainfall^2) + 
-      I(Snowfall^2) + Month:(Season + Holiday) +
-      Hour:(Temperature + Humidity + Visibility + SolarRadiation + Rainfall + Season + Holiday + Functional) + 
-      Temperature:(Humidity + DewPoint + SolarRadiation + Rainfall + Season + Holiday + Functional) + 
-      Humidity:(Visibility + DewPoint + Rainfall + Holiday + Functional) + 
-      Wind:(Visibility + DewPoint) + Visibility:Rainfall + 
-      DewPoint:(Rainfall + Season + Functional) + 
-      SolarRadiation:Holiday + Rainfall:Functional + Season:Holiday +
-			I(Hour^2):(Temperature + Season) + I(Hour^3):Temperature + 
-      I(Temperature^2):(Temperature + Humidity + DewPoint + Rainfall + Season) + 
-      I(Humidity^2):(Hour + Temperature + Humidity + Wind + Functional) + 
-      I(Wind^2):(Humidity + Visibility + DewPoint) +
-      I(Visibility^2):(Hour + Temperature + Humidity + Visibility + DewPoint + Rainfall) +
-      I(DewPoint^2):(Humidity + DewPoint + SolarRadiation + Rainfall) +
-      I(SolarRadiation^2):(SolarRadiation + Rainfall + Holiday) +
-      I(Rainfall^2):(Temperature + Humidity + DewPoint + SolarRadiation + Rainfall + Functional) +
-      I(Snowfall^2):(Wind + Visibility + Snowfall))
+  I(Hour^2) * . + I(Temperature^2) * . + I(Humidity^2) * . + 
+  I(Wind^2) * . + I(Visibility^2) * . + I(DewPoint^2) * . + 
+  I(SolarRadiation^2) * . + I(Rainfall^2) * . + I(Snowfall^2) * . , data = bike_trn)
+best_formula = formula(sqrt(RentedBikeCount) ~ .-Hour + factor(Hour)*Weekend + I(Temperature^2) + I(Humidity^2) + I(Wind^2) +
+  I(Visibility^2) + I(DewPoint^2) + I(SolarRadiation^2) + I(Rainfall^2) + I(Snowfall^2) + Month:(Season + Holiday) +
+  Hour:(Temperature + Humidity + Visibility + SolarRadiation + Rainfall + Season + Holiday + Functional) + 
+  Temperature:(Humidity + DewPoint + SolarRadiation + Rainfall + Season + Holiday + Functional) + 
+  Humidity:(Visibility + DewPoint + Rainfall + Holiday + Functional) + 
+  Wind:(Visibility + DewPoint) + Visibility:Rainfall + DewPoint:(Rainfall + Season + Functional) + SolarRadiation:Holiday +
+  Rainfall:Functional + Season:Holiday +
+	I(Hour^2):(Temperature + Season) + I(Hour^3):Temperature + 
+  I(Temperature^2):(Temperature + Humidity + DewPoint + Rainfall + Season) + 
+  I(Humidity^2):(Hour + Temperature + Humidity + Wind + Functional) + 
+  I(Wind^2):(Humidity + Visibility + DewPoint) +
+  I(Visibility^2):(Hour + Temperature + Humidity + Visibility + DewPoint + Rainfall) +
+  I(DewPoint^2):(Humidity + DewPoint + SolarRadiation + Rainfall) +
+  I(SolarRadiation^2):(SolarRadiation + Rainfall + Holiday) +
+  I(Rainfall^2):(Temperature + Humidity + DewPoint + SolarRadiation + Rainfall + Functional) +
+  I(Snowfall^2):(Wind + Visibility + Snowfall))
 best_model = lm(best_formula, data = bike_trn)
 sqrt_models = list(bic_sqrt, best_model, bic_sqrt_full)
 frame2_sqrt = evaluate_power(sqrt_models, power = 0.5, c("BIC Sqrt","BIC Sqrt Optimal", "BIC Sqrt Full"))
