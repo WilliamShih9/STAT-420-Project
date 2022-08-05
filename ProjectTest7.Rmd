@@ -306,7 +306,7 @@ aic_model = lm(aic_formula, data = bike_trn)
 bic_model = lm(bic_formula, data = bike_trn)
 ```
 
-The BIC model was only slightly worse than the AIC model while lowering the number of parameters from 140 to 99 so the model selected from backward stepwise regression using BIC was the initial choice of model.
+The BIC model was only slightly worse than the AIC model while lowering the number of parameters from 214 to 137 so the model selected from backward stepwise regression using BIC was the initial choice of model.
 
 ```{r, warning = FALSE, message = FALSE}
 plot_diag1 = plot_diagnostics(bic_model, "BIC Model with no Transform")
